@@ -10,20 +10,25 @@ const token = '8005167313:AAFu5AxIB2Itfhdgr6peM7rip0HGUieJmkc';
 // 2. ID Админов (можно удалять любые брони)
 const ADMIN_IDS = ['299696306', '1300836384']; // Замените на реальные ID
 
-const bot = new TelegramBot(token, { polling: true });
+// Initialize bot only in development (polling doesn't work well on Render)
+const bot = process.env.NODE_ENV === 'production'
+    ? new TelegramBot(token, { polling: false })
+    : new TelegramBot(token, { polling: true });
 
 // Handle polling errors gracefully
-bot.on('polling_error', (error) => {
-    // Only log specific error types to avoid spam
-    if (error.code === 'EFATAL') {
-        console.error('[Telegram Bot] Connection error - retrying...', error.message);
-    } else {
-        console.error('[Telegram Bot] Polling error:', error.code || error.message);
-    }
-});
+if (process.env.NODE_ENV !== 'production') {
+    bot.on('polling_error', (error) => {
+        // Only log specific error types to avoid spam
+        if (error.code === 'EFATAL') {
+            console.error('[Telegram Bot] Connection error - retrying...', error.message);
+        } else {
+            console.error('[Telegram Bot] Polling error:', error.code || error.message);
+        }
+    });
+}
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Setup PostgreSQL Connection Pool
 // Используем DATABASE_URL из переменных окружения или локальные настройки
@@ -229,6 +234,16 @@ function getWarsawDate() {
 }
 
 // --- API Endpoints ---
+
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+    res.send('Dorm App API is running! 🎮');
+});
 
 // Sync user data on app startup (updates language and other info)
 app.post('/api/user/sync', async (req, res) => {
