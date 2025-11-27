@@ -926,7 +926,7 @@ bot.onText(/\/start/, (msg) => {
             inline_keyboard: [[
                 {
                     text: '🚀 Открыть приложение',
-                    web_app: { url: "https://nonapparent-granophyric-laylah.ngrok-free.dev" }
+                    web_app: { url: "https://wsb-fx6d.onrender.com" }
                 }
             ]]
         }
