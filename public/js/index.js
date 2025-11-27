@@ -359,7 +359,15 @@ async function createGathering(e) {
         const url = editingGatheringId ? `${API_URL}/gatherings/${editingGatheringId}` : `${API_URL}/gatherings`;
         const method = editingGatheringId ? 'PUT' : 'POST';
         const body = editingGatheringId ? { title, time, description: desc, image_url: selectedImages.length > 0 ? JSON.stringify(selectedImages) : '' } : { title, time, description: desc, created_by: currentUser.username, user_id: currentUser.id, first_name: currentUser.first_name, user_photo: currentUser.photo_url, image_url: selectedImages.length > 0 ? JSON.stringify(selectedImages) : '' };
-        const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id }, body: JSON.stringify(body) });
+        const response = await fetch(url, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': currentUser.id,
+                'x-telegram-init-data': tg.initData
+            },
+            body: JSON.stringify(body)
+        });
         if (response.ok) {
             closeModal('gathering-modal');
             document.getElementById('gathering-form').reset();
