@@ -674,6 +674,10 @@ setInterval(async () => {
 app.post('/api/reviews', async (req, res) => {
     const { user_id, username, first_name, photo_url, category, message } = req.body;
 
+    if (user_id === 'guest') {
+        return res.status(403).json({ "error": "Reviews not allowed for guests" });
+    }
+
     if (!message || !category) {
         return res.status(400).json({ "error": "Missing required fields" });
     }
