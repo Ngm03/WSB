@@ -272,7 +272,13 @@ function openEditModal(item) {
 async function deleteGathering(id) {
     if (!confirm(t.deleteConfirm)) return;
     try {
-        const response = await fetch(`${API_URL}/gatherings/${id}`, { method: 'DELETE', headers: { 'x-user-id': currentUser.id } });
+        const response = await fetch(`${API_URL}/gatherings/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'x-user-id': currentUser.id,
+                'x-telegram-init-data': tg.initData
+            }
+        });
         if (response.ok) { loadGatherings(); tg.showAlert(t.deleted); } else { tg.showAlert(t.error); }
     } catch (error) {
         console.error('Delete error:', error);
