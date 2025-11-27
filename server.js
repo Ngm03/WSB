@@ -321,6 +321,10 @@ app.get('/api/bookings', async (req, res) => {
 app.post('/api/bookings', async (req, res) => {
     const { user_id, username, first_name, photo_url, language_code, date, slot_time, end_time, comment, floor = '3' } = req.body;
 
+    if (user_id === 'guest') {
+        return res.status(403).json({ "error": "Booking not allowed for guests" });
+    }
+
     if (!date || !slot_time || !end_time) {
         return res.status(400).json({ "error": "Missing required fields" });
     }
