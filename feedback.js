@@ -551,6 +551,7 @@ async function deleteReview(reviewId) {
 }
 
 async function deleteComment(commentId) {
+    console.log('Attempting to delete comment:', commentId);
     if (!confirm(t.deleteCommentConfirm)) return;
 
     try {
@@ -633,6 +634,7 @@ async function submitEditReview() {
 // --- Edit Comment Functions ---
 
 function editComment(commentId) {
+    console.log('Opening edit modal for comment:', commentId);
     editingCommentId = commentId;
     const textEl = document.getElementById(`comment-text-${commentId}`);
     const currentText = textEl.getAttribute('data-original') || textEl.textContent;
@@ -647,6 +649,7 @@ function closeEditCommentModal() {
 }
 
 async function submitEditComment() {
+    console.log('Submitting edit for comment:', editingCommentId);
     if (!editingCommentId) return;
 
     const comment = document.getElementById('edit-comment-text').value;
