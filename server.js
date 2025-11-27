@@ -740,6 +740,21 @@ app.delete('/api/reviews/:id', async (req, res) => {
     }
 });
 
+app.delete('/api/admin/reviews', async (req, res) => {
+    const userId = req.headers['x-user-id'];
+
+    if (!userId || !ADMIN_IDS.includes(String(userId))) {
+        return res.status(403).json({ "error": "Forbidden" });
+    }
+
+    try {
+        await pool.query('DELETE FROM reviews');
+        res.json({ "message": "All reviews deleted" });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
+});
+
 app.get('/api/reviews', async (req, res) => {
     const userId = req.headers['x-user-id'];
 
