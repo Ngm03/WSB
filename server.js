@@ -2,13 +2,13 @@ const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const mysql = require('mysql2');
+const { Pool } = require('pg');
 const path = require('path');
 
 // 1. ВСТАВЬ СВОЙ ТОКЕН СЮДА
 const token = '8005167313:AAFu5AxIB2Itfhdgr6peM7rip0HGUieJmkc';
 // 2. ID Админов (можно удалять любые брони)
-const ADMIN_IDS = ['299696306', 'YOUR_ID_2']; // Замените на реальные ID
+const ADMIN_IDS = ['299696306', '1300836384']; // Замените на реальные ID
 
 const bot = new TelegramBot(token, { polling: true });
 
@@ -25,27 +25,30 @@ bot.on('polling_error', (error) => {
 const app = express();
 const PORT = 3000;
 
-// Setup MySQL Connection Pool
-const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'dorm_app',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    timezone: '+00:00' // Force UTC
+// Setup PostgreSQL Connection Pool
+// Используем DATABASE_URL из переменных окружения или локальные настройки
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:@localhost:5432/dorm_app',
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
 });
 
 // Test connection
-pool.getConnection((err, connection) => {
+pool.connect((err, client, release) => {
     if (err) {
-        console.error('Error connecting to MySQL:', err.message);
+        console.error('Error connecting to PostgreSQL:', err.message);
     } else {
-        console.log('Connected to the MySQL database.');
-        connection.release();
+        console.log('Connected to the PostgreSQL database.');
+        release();
         initDb();
     }
+});
+
+// Handle pool errors
+pool.on('error', (err) => {
+    console.error('Unexpected error on idle PostgreSQL client', err);
 });
 
 function initDb() {
@@ -56,13 +59,13 @@ function initDb() {
             first_name TEXT,
             photo_url TEXT,
             language_code VARCHAR(10) DEFAULT 'en',
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
     `;
 
     const bookingsTable = `
         CREATE TABLE IF NOT EXISTS bookings (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             user_id VARCHAR(255),
             username TEXT,
             first_name TEXT,
@@ -72,14 +75,14 @@ function initDb() {
             end_time VARCHAR(255),
             floor VARCHAR(10) DEFAULT '3',
             comment TEXT,
-            notified BOOLEAN DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            notified BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
     `;
 
     const gatheringsTable = `
         CREATE TABLE IF NOT EXISTS gatherings (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             title TEXT,
             time VARCHAR(255),
             description TEXT,
@@ -90,38 +93,38 @@ function initDb() {
             image_url TEXT,
             likes_count INT DEFAULT 0,
             comments_count INT DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
     `;
 
     const gatheringLikesTable = `
         CREATE TABLE IF NOT EXISTS gathering_likes (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             gathering_id INT,
             user_id VARCHAR(255),
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_like (gathering_id, user_id),
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT unique_like_gathering UNIQUE (gathering_id, user_id),
             FOREIGN KEY (gathering_id) REFERENCES gatherings(id) ON DELETE CASCADE
         )
     `;
 
     const gatheringCommentsTable = `
         CREATE TABLE IF NOT EXISTS gathering_comments (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             gathering_id INT,
             user_id VARCHAR(255),
             username TEXT,
             first_name TEXT,
             photo_url TEXT,
             comment TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (gathering_id) REFERENCES gatherings(id) ON DELETE CASCADE
         )
     `;
 
     const feedbackTable = `
         CREATE TABLE IF NOT EXISTS reviews (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             user_id VARCHAR(255),
             username TEXT,
             first_name TEXT,
@@ -130,31 +133,31 @@ function initDb() {
             message TEXT,
             likes_count INT DEFAULT 0,
             comments_count INT DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
     `;
 
     const commentsTable = `
         CREATE TABLE IF NOT EXISTS review_comments (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             review_id INT,
             user_id VARCHAR(255),
             username TEXT,
             first_name TEXT,
             photo_url TEXT,
             comment TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
         )
     `;
 
     const likesTable = `
         CREATE TABLE IF NOT EXISTS review_likes (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             review_id INT,
             user_id VARCHAR(255),
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_like (review_id, user_id),
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT unique_like_review UNIQUE (review_id, user_id),
             FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
         )
     `;
@@ -186,9 +189,9 @@ function query(connection, sql, params) {
 }
 
 function checkOverlap(connection, date, start, end, floor) {
-    return query(connection, "SELECT * FROM bookings WHERE date = ? AND floor = ?", [date, floor])
-        .then(rows => {
-            return rows.some(row => {
+    return query(connection, "SELECT * FROM bookings WHERE date = $1 AND floor = $2", [date, floor])
+        .then(result => {
+            return result.rows.some(row => {
                 const existingStart = row.slot_time;
                 const existingEnd = row.end_time || row.slot_time;
                 return start < existingEnd && end > existingStart;
@@ -197,7 +200,7 @@ function checkOverlap(connection, date, start, end, floor) {
 }
 
 function insertBooking(connection, data) {
-    const sql = 'INSERT INTO bookings (user_id, username, first_name, photo_url, date, slot_time, end_time, floor, comment) VALUES (?,?,?,?,?,?,?,?,?)';
+    const sql = 'INSERT INTO bookings (user_id, username, first_name, photo_url, date, slot_time, end_time, floor, comment) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)';
     const params = [data.user_id, data.username, data.first_name, data.photo_url, data.date, data.slot_time, data.end_time, data.floor, data.comment];
     return query(connection, sql, params);
 }
@@ -205,13 +208,13 @@ function insertBooking(connection, data) {
 function upsertUser(connection, user) {
     const sql = `
         INSERT INTO users (telegram_id, username, first_name, photo_url, language_code) 
-        VALUES (?, ?, ?, ?, ?) 
-        ON DUPLICATE KEY UPDATE 
-            username=VALUES(username), 
-            first_name=VALUES(first_name), 
-            photo_url=VALUES(photo_url),
-            language_code=VALUES(language_code),
-            updated_at=CURRENT_TIMESTAMP
+        VALUES ($1, $2, $3, $4, $5) 
+        ON CONFLICT (telegram_id) DO UPDATE SET 
+            username = EXCLUDED.username, 
+            first_name = EXCLUDED.first_name, 
+            photo_url = EXCLUDED.photo_url,
+            language_code = EXCLUDED.language_code,
+            updated_at = CURRENT_TIMESTAMP
     `;
     return query(connection, sql, [user.user_id, user.username, user.first_name, user.photo_url, user.language_code || 'en']);
 }
@@ -228,36 +231,31 @@ function getWarsawDate() {
 // --- API Endpoints ---
 
 // Sync user data on app startup (updates language and other info)
-app.post('/api/user/sync', (req, res) => {
+app.post('/api/user/sync', async (req, res) => {
     const { user_id, username, first_name, photo_url, language_code } = req.body;
 
     if (!user_id) {
         return res.status(400).json({ "error": "Missing user_id" });
     }
 
-    pool.getConnection(async (err, connection) => {
-        if (err) {
-            return res.status(500).json({ "error": "DB Connection Failed" });
-        }
+    const client = await pool.connect();
+    try {
+        // 1. Update user in users table
+        await upsertUser(client, { user_id, username, first_name, photo_url, language_code });
 
-        try {
-            // 1. Update user in users table
-            await upsertUser(connection, { user_id, username, first_name, photo_url, language_code });
+        // 2. Update all existing bookings with new user data
+        await query(client,
+            'UPDATE bookings SET username = $1, first_name = $2, photo_url = $3 WHERE user_id = $4',
+            [username, first_name, photo_url, user_id]
+        );
 
-            // 2. Update all existing bookings with new user data
-            await query(connection,
-                'UPDATE bookings SET username = ?, first_name = ?, photo_url = ? WHERE user_id = ?',
-                [username, first_name, photo_url, user_id]
-            );
-
-            res.json({ "message": "User synced successfully", "language_code": language_code || 'en' });
-        } catch (error) {
-            console.error("User sync error:", error);
-            res.status(500).json({ "error": error.message || "Internal Server Error" });
-        } finally {
-            connection.release();
-        }
-    });
+        res.json({ "message": "User synced successfully", "language_code": language_code || 'en' });
+    } catch (error) {
+        console.error("User sync error:", error);
+        res.status(500).json({ "error": error.message || "Internal Server Error" });
+    } finally {
+        client.release();
+    }
 });
 
 // Get user profile photo from Telegram
@@ -273,21 +271,15 @@ app.get('/api/user/photo/:userId', async (req, res) => {
             const photoUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
 
             // Update user's photo_url in database
-            pool.query(
-                'UPDATE users SET photo_url = ? WHERE telegram_id = ?',
-                [photoUrl, userId],
-                (err) => {
-                    if (err) console.error('Error updating photo_url:', err);
-                }
+            await pool.query(
+                'UPDATE users SET photo_url = $1 WHERE telegram_id = $2',
+                [photoUrl, userId]
             );
 
             // Update all bookings with new photo
-            pool.query(
-                'UPDATE bookings SET photo_url = ? WHERE user_id = ?',
-                [photoUrl, userId],
-                (err) => {
-                    if (err) console.error('Error updating bookings photo_url:', err);
-                }
+            await pool.query(
+                'UPDATE bookings SET photo_url = $1 WHERE user_id = $2',
+                [photoUrl, userId]
             );
 
             res.json({ photo_url: photoUrl });
@@ -300,24 +292,23 @@ app.get('/api/user/photo/:userId', async (req, res) => {
     }
 });
 
-app.get('/api/bookings', (req, res) => {
+app.get('/api/bookings', async (req, res) => {
     const floor = req.query.floor || '3';
     const sql = `
         SELECT b.* 
         FROM bookings b 
-        WHERE b.floor = ?
+        WHERE b.floor = $1
         ORDER BY b.date, b.slot_time
     `;
-    pool.query(sql, [floor], (err, rows) => {
-        if (err) {
-            res.status(400).json({ "error": err.message });
-            return;
-        }
-        res.json({ "data": rows });
-    });
+    try {
+        const result = await pool.query(sql, [floor]);
+        res.json({ "data": result.rows });
+    } catch (err) {
+        res.status(400).json({ "error": err.message });
+    }
 });
 
-app.post('/api/bookings', (req, res) => {
+app.post('/api/bookings', async (req, res) => {
     const { user_id, username, first_name, photo_url, language_code, date, slot_time, end_time, comment, floor = '3' } = req.body;
 
     if (!date || !slot_time || !end_time) {
@@ -332,24 +323,22 @@ app.post('/api/bookings', (req, res) => {
         return res.status(400).json({ "error": "Нельзя бронировать в прошлом!" });
     }
 
-    // Get Connection for Transaction
-    pool.getConnection(async (err, connection) => {
-        if (err) {
-            return res.status(500).json({ "error": "DB Connection Failed" });
+    const client = await pool.connect();
+    try {
+        // 1. Start Transaction
+        await client.query('BEGIN');
+
+        // 2. Get Advisory Lock (PostgreSQL equivalent of GET_LOCK)
+        // Using a hash of 'booking_lock' string as lock ID
+        const lockId = 123456; // You can use hashCode('booking_lock') or any unique number
+        const lockRes = await client.query('SELECT pg_try_advisory_lock($1) AS locked', [lockId]);
+        if (!lockRes.rows[0].locked) {
+            throw new Error("Server busy, try again");
         }
 
         try {
-            // 1. Start Transaction
-            await query(connection, 'START TRANSACTION');
-
-            // 2. Get Lock (Wait 5s)
-            const lockRes = await query(connection, "SELECT GET_LOCK('booking_lock', 5) AS locked");
-            if (!lockRes[0].locked) {
-                throw new Error("Server busy, try again");
-            }
-
             // 3. Upsert User with language_code
-            await upsertUser(connection, { user_id, username, first_name, photo_url, language_code });
+            await upsertUser(client, { user_id, username, first_name, photo_url, language_code });
 
             // 4. Booking Logic
             if (end_time < slot_time) {
@@ -358,47 +347,51 @@ app.post('/api/bookings', (req, res) => {
                 nextDateObj.setDate(nextDateObj.getDate() + 1);
                 const nextDate = nextDateObj.toISOString().split('T')[0];
 
-                const overlap1 = await checkOverlap(connection, date, slot_time, "24:00", floor);
-                const overlap2 = await checkOverlap(connection, nextDate, "00:00", end_time, floor);
+                const overlap1 = await checkOverlap(client, date, slot_time, "24:00", floor);
+                const overlap2 = await checkOverlap(client, nextDate, "00:00", end_time, floor);
 
                 if (overlap1 || overlap2) {
-                    await query(connection, 'ROLLBACK');
+                    await client.query('ROLLBACK');
+                    await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
                     return res.status(409).json({ "error": "Пересечение с другой бронью!" });
                 }
 
-                await insertBooking(connection, { user_id, username, first_name, photo_url, date, slot_time, end_time: "24:00", floor, comment: comment + " (Часть 1)" });
-                await insertBooking(connection, { user_id, username, first_name, photo_url, date: nextDate, slot_time: "00:00", end_time, floor, comment: comment + " (Часть 2)" });
+                await insertBooking(client, { user_id, username, first_name, photo_url, date, slot_time, end_time: "24:00", floor, comment: comment + " (Часть 1)" });
+                await insertBooking(client, { user_id, username, first_name, photo_url, date: nextDate, slot_time: "00:00", end_time, floor, comment: comment + " (Часть 2)" });
 
+                await client.query('COMMIT');
+                await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
                 res.json({ "message": "success", "crossDay": true });
 
             } else {
                 // Normal
-                const hasOverlap = await checkOverlap(connection, date, slot_time, end_time, floor);
+                const hasOverlap = await checkOverlap(client, date, slot_time, end_time, floor);
                 if (hasOverlap) {
-                    await query(connection, 'ROLLBACK');
+                    await client.query('ROLLBACK');
+                    await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
                     return res.status(409).json({ "error": "Это время уже занято!" });
                 }
 
-                await insertBooking(connection, { user_id, username, first_name, photo_url, date, slot_time, end_time, floor, comment });
+                await insertBooking(client, { user_id, username, first_name, photo_url, date, slot_time, end_time, floor, comment });
+                await client.query('COMMIT');
+                await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
                 res.json({ "message": "success" });
             }
-
-            // 5. Commit
-            await query(connection, 'COMMIT');
-
         } catch (error) {
-            await query(connection, 'ROLLBACK');
-            console.error("Transaction Error:", error);
-            res.status(500).json({ "error": error.message || "Internal Server Error" });
-        } finally {
-            // 6. Release Lock & Connection
-            await query(connection, "SELECT RELEASE_LOCK('booking_lock')");
-            connection.release();
+            await client.query('ROLLBACK');
+            await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
+            throw error;
         }
-    });
+
+    } catch (error) {
+        console.error("Transaction Error:", error);
+        res.status(500).json({ "error": error.message || "Internal Server Error" });
+    } finally {
+        client.release();
+    }
 });
 
-app.put('/api/bookings/:id', (req, res) => {
+app.put('/api/bookings/:id', async (req, res) => {
     const bookingId = req.params.id;
     const userId = req.headers['x-user-id'];
     const { slot_time, end_time, comment } = req.body;
@@ -406,69 +399,66 @@ app.put('/api/bookings/:id', (req, res) => {
     if (!userId) return res.status(401).json({ "error": "Unauthorized" });
     if (!slot_time || !end_time) return res.status(400).json({ "error": "Missing fields" });
 
-    pool.getConnection(async (err, connection) => {
-        if (err) return res.status(500).json({ "error": "DB Connection Failed" });
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
 
-        try {
-            await query(connection, 'START TRANSACTION');
-
-            // 1. Get existing booking
-            const rows = await query(connection, 'SELECT * FROM bookings WHERE id = ? FOR UPDATE', [bookingId]);
-            if (rows.length === 0) {
-                await query(connection, 'ROLLBACK');
-                return res.status(404).json({ "error": "Booking not found" });
-            }
-
-            const booking = rows[0];
-
-            // 2. Check ownership
-            if (String(booking.user_id) !== String(userId) && !ADMIN_IDS.includes(String(userId))) {
-                await query(connection, 'ROLLBACK');
-                return res.status(403).json({ "error": "Нет прав" });
-            }
-
-            // 3. Validate Shrink-Only Constraint
-            if (slot_time < booking.slot_time || end_time > booking.end_time) {
-                await query(connection, 'ROLLBACK');
-                return res.status(400).json({ "error": "Можно только уменьшить время брони!" });
-            }
-
-            // --- Smart Cross-Day Logic ---
-            if (booking.end_time === "24:00" && end_time < "24:00") {
-                const dateObj = new Date(booking.date);
-                dateObj.setDate(dateObj.getDate() + 1);
-                const nextDate = dateObj.toISOString().split('T')[0];
-
-                const part2Rows = await query(connection,
-                    'SELECT id FROM bookings WHERE user_id = ? AND date = ? AND slot_time = "00:00"',
-                    [userId, nextDate]
-                );
-
-                if (part2Rows.length > 0) {
-                    await query(connection, 'DELETE FROM bookings WHERE id = ?', [part2Rows[0].id]);
-                    console.log(`[Smart Update] Deleted Part 2 (ID: ${part2Rows[0].id}) because Part 1 was shortened.`);
-                }
-            }
-            // -----------------------------
-
-            // 4. Update
-            await query(connection, 'UPDATE bookings SET slot_time = ?, end_time = ?, comment = ? WHERE id = ?',
-                [slot_time, end_time, comment, bookingId]);
-
-            await query(connection, 'COMMIT');
-            res.json({ "message": "Updated successfully" });
-
-        } catch (error) {
-            await query(connection, 'ROLLBACK');
-            console.error(error);
-            res.status(500).json({ "error": "Internal Server Error" });
-        } finally {
-            connection.release();
+        // 1. Get existing booking
+        const result = await client.query('SELECT * FROM bookings WHERE id = $1 FOR UPDATE', [bookingId]);
+        if (result.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ "error": "Booking not found" });
         }
-    });
+
+        const booking = result.rows[0];
+
+        // 2. Check ownership
+        if (String(booking.user_id) !== String(userId) && !ADMIN_IDS.includes(String(userId))) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ "error": "Нет прав" });
+        }
+
+        // 3. Validate Shrink-Only Constraint
+        if (slot_time < booking.slot_time || end_time > booking.end_time) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ "error": "Можно только уменьшить время брони!" });
+        }
+
+        // --- Smart Cross-Day Logic ---
+        if (booking.end_time === "24:00" && end_time < "24:00") {
+            const dateObj = new Date(booking.date);
+            dateObj.setDate(dateObj.getDate() + 1);
+            const nextDate = dateObj.toISOString().split('T')[0];
+
+            const part2Result = await client.query(
+                'SELECT id FROM bookings WHERE user_id = $1 AND date = $2 AND slot_time = $3',
+                [userId, nextDate, "00:00"]
+            );
+
+            if (part2Result.rows.length > 0) {
+                await client.query('DELETE FROM bookings WHERE id = $1', [part2Result.rows[0].id]);
+                console.log(`[Smart Update] Deleted Part 2 (ID: ${part2Result.rows[0].id}) because Part 1 was shortened.`);
+            }
+        }
+        // -----------------------------
+
+        // 4. Update
+        await client.query('UPDATE bookings SET slot_time = $1, end_time = $2, comment = $3 WHERE id = $4',
+            [slot_time, end_time, comment, bookingId]);
+
+        await client.query('COMMIT');
+        res.json({ "message": "Updated successfully" });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error(error);
+        res.status(500).json({ "error": "Internal Server Error" });
+    } finally {
+        client.release();
+    }
 });
 
-app.delete('/api/bookings/:id', (req, res) => {
+app.delete('/api/bookings/:id', async (req, res) => {
     const bookingId = req.params.id;
     const userId = req.headers['x-user-id'];
 
@@ -476,12 +466,12 @@ app.delete('/api/bookings/:id', (req, res) => {
         return res.status(401).json({ "error": "Unauthorized" });
     }
 
-    // 1. Check ownership
-    pool.query('SELECT user_id FROM bookings WHERE id = ?', [bookingId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (rows.length === 0) return res.status(404).json({ "error": "Booking not found" });
+    try {
+        // 1. Check ownership
+        const result = await pool.query('SELECT user_id FROM bookings WHERE id = $1', [bookingId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Booking not found" });
 
-        const booking = rows[0];
+        const booking = result.rows[0];
         const isOwner = String(booking.user_id) === String(userId);
         const isAdmin = ADMIN_IDS.includes(String(userId));
 
@@ -490,190 +480,190 @@ app.delete('/api/bookings/:id', (req, res) => {
         }
 
         // 2. Delete
-        pool.query('DELETE FROM bookings WHERE id = ?', [bookingId], (err) => {
-            if (err) return res.status(500).json({ "error": err.message });
-            res.json({ "message": "deleted" });
-            console.log(`Booking ${bookingId} deleted by ${userId}`);
-        });
-    });
+        await pool.query('DELETE FROM bookings WHERE id = $1', [bookingId]);
+        res.json({ "message": "deleted" });
+        console.log(`Booking ${bookingId} deleted by ${userId}`);
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
-app.get('/api/gatherings', (req, res) => {
+app.get('/api/gatherings', async (req, res) => {
     const userId = req.headers['x-user-id'];
     const sql = `
         SELECT g.*, 
-               EXISTS(SELECT 1 FROM gathering_likes WHERE gathering_id = g.id AND user_id = ?) as user_liked
+               EXISTS(SELECT 1 FROM gathering_likes WHERE gathering_id = g.id AND user_id = $1) as user_liked
         FROM gatherings g
         ORDER BY g.created_at DESC
     `;
-    pool.query(sql, [userId], (err, rows) => {
-        if (err) {
-            res.status(400).json({ "error": err.message });
-            return;
-        }
-        res.json({ "data": rows });
-    });
+    try {
+        const result = await pool.query(sql, [userId]);
+        res.json({ "data": result.rows });
+    } catch (err) {
+        res.status(400).json({ "error": err.message });
+    }
 });
 
-app.post('/api/gatherings', (req, res) => {
+app.post('/api/gatherings', async (req, res) => {
     const { title, time, description, created_by, user_id, first_name, user_photo, image_url } = req.body;
     console.log('[POST /api/gatherings] Received:', { title, time, user_id, first_name, has_image: !!image_url });
 
-    const sql = 'INSERT INTO gatherings (title, time, description, created_by, user_id, first_name, user_photo, image_url) VALUES (?,?,?,?,?,?,?,?)';
+    const sql = 'INSERT INTO gatherings (title, time, description, created_by, user_id, first_name, user_photo, image_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id';
     const params = [title, time, description, created_by, user_id, first_name, user_photo, image_url];
-    pool.query(sql, params, function (err, result) {
-        if (err) {
-            console.error('[POST /api/gatherings] Error:', err.message);
-            res.status(400).json({ "error": err.message });
-            return;
-        }
-        console.log('[POST /api/gatherings] Success, ID:', result.insertId);
+    try {
+        const result = await pool.query(sql, params);
+        console.log('[POST /api/gatherings] Success, ID:', result.rows[0].id);
         res.json({
             "message": "success",
             "data": req.body,
-            "id": result.insertId
+            "id": result.rows[0].id
         });
-    });
+    } catch (err) {
+        console.error('[POST /api/gatherings] Error:', err.message);
+        res.status(400).json({ "error": err.message });
+    }
 });
 
 // Update gathering (only owner)
-app.put('/api/gatherings/:id', (req, res) => {
+app.put('/api/gatherings/:id', async (req, res) => {
     const gatheringId = req.params.id;
     const userId = req.headers['x-user-id'];
     const { title, time, description, image_url } = req.body;
 
-    pool.query('SELECT user_id FROM gatherings WHERE id = ?', [gatheringId], (err, rows) => {
-        if (err) return res.status(400).json({ "error": err.message });
-        if (rows.length === 0) return res.status(404).json({ "error": "Not found" });
-        if (rows[0].user_id != userId) return res.status(403).json({ "error": "Not authorized" });
+    try {
+        const result = await pool.query('SELECT user_id FROM gatherings WHERE id = $1', [gatheringId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Not found" });
+        if (result.rows[0].user_id != userId) return res.status(403).json({ "error": "Not authorized" });
 
-        const sql = 'UPDATE gatherings SET title = ?, time = ?, description = ?, image_url = ? WHERE id = ?';
-        pool.query(sql, [title, time, description, image_url, gatheringId], (err) => {
-            if (err) return res.status(400).json({ "error": err.message });
-            res.json({ "message": "updated" });
-        });
-    });
+        const sql = 'UPDATE gatherings SET title = $1, time = $2, description = $3, image_url = $4 WHERE id = $5';
+        await pool.query(sql, [title, time, description, image_url, gatheringId]);
+        res.json({ "message": "updated" });
+    } catch (err) {
+        res.status(400).json({ "error": err.message });
+    }
 });
 
 // Delete gathering (only owner)
-app.delete('/api/gatherings/:id', (req, res) => {
+app.delete('/api/gatherings/:id', async (req, res) => {
     const gatheringId = req.params.id;
     const userId = req.headers['x-user-id'];
 
-    pool.query('SELECT user_id FROM gatherings WHERE id = ?', [gatheringId], (err, rows) => {
-        if (err) return res.status(400).json({ "error": err.message });
-        if (rows.length === 0) return res.status(404).json({ "error": "Not found" });
-        if (rows[0].user_id != userId) return res.status(403).json({ "error": "Not authorized" });
+    try {
+        const result = await pool.query('SELECT user_id FROM gatherings WHERE id = $1', [gatheringId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Not found" });
+        if (result.rows[0].user_id != userId) return res.status(403).json({ "error": "Not authorized" });
 
-        pool.query('DELETE FROM gatherings WHERE id = ?', [gatheringId], (err) => {
-            if (err) return res.status(400).json({ "error": err.message });
-            res.json({ "message": "deleted" });
-        });
-    });
+        await pool.query('DELETE FROM gatherings WHERE id = $1', [gatheringId]);
+        res.json({ "message": "deleted" });
+    } catch (err) {
+        res.status(400).json({ "error": err.message });
+    }
 });
 
 // Like/Unlike gathering
-app.post('/api/gatherings/:id/like', (req, res) => {
+app.post('/api/gatherings/:id/like', async (req, res) => {
     const gatheringId = req.params.id;
     const userId = req.headers['x-user-id'];
 
     if (!userId) return res.status(401).json({ "error": "Unauthorized" });
 
-    pool.query('SELECT * FROM gathering_likes WHERE gathering_id = ? AND user_id = ?', [gatheringId, userId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
+    try {
+        const result = await pool.query('SELECT * FROM gathering_likes WHERE gathering_id = $1 AND user_id = $2', [gatheringId, userId]);
 
-        if (rows.length > 0) {
-            pool.query('DELETE FROM gathering_likes WHERE gathering_id = ? AND user_id = ?', [gatheringId, userId], (err) => {
-                if (err) return res.status(500).json({ "error": err.message });
-                pool.query('UPDATE gatherings SET likes_count = likes_count - 1 WHERE id = ?', [gatheringId]);
-                res.json({ "message": "unliked" });
-            });
+        if (result.rows.length > 0) {
+            await pool.query('DELETE FROM gathering_likes WHERE gathering_id = $1 AND user_id = $2', [gatheringId, userId]);
+            await pool.query('UPDATE gatherings SET likes_count = likes_count - 1 WHERE id = $1', [gatheringId]);
+            res.json({ "message": "unliked" });
         } else {
-            pool.query('INSERT INTO gathering_likes (gathering_id, user_id) VALUES (?,?)', [gatheringId, userId], (err) => {
-                if (err) return res.status(500).json({ "error": err.message });
-                pool.query('UPDATE gatherings SET likes_count = likes_count + 1 WHERE id = ?', [gatheringId]);
-                res.json({ "message": "liked" });
-            });
+            await pool.query('INSERT INTO gathering_likes (gathering_id, user_id) VALUES ($1,$2)', [gatheringId, userId]);
+            await pool.query('UPDATE gatherings SET likes_count = likes_count + 1 WHERE id = $1', [gatheringId]);
+            res.json({ "message": "liked" });
         }
-    });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Get comments for gathering
-app.get('/api/gatherings/:id/comments', (req, res) => {
+app.get('/api/gatherings/:id/comments', async (req, res) => {
     const gatheringId = req.params.id;
-    pool.query('SELECT * FROM gathering_comments WHERE gathering_id = ? ORDER BY created_at ASC', [gatheringId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        res.json({ "data": rows });
-    });
+    try {
+        const result = await pool.query('SELECT * FROM gathering_comments WHERE gathering_id = $1 ORDER BY created_at ASC', [gatheringId]);
+        res.json({ "data": result.rows });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Add comment to gathering
-app.post('/api/gatherings/:id/comments', (req, res) => {
+app.post('/api/gatherings/:id/comments', async (req, res) => {
     const gatheringId = req.params.id;
     const { user_id, username, first_name, photo_url, comment } = req.body;
 
     if (!comment) return res.status(400).json({ "error": "Comment is required" });
 
-    const sql = 'INSERT INTO gathering_comments (gathering_id, user_id, username, first_name, photo_url, comment) VALUES (?,?,?,?,?,?)';
-    pool.query(sql, [gatheringId, user_id, username, first_name, photo_url, comment], (err, result) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        pool.query('UPDATE gatherings SET comments_count = comments_count + 1 WHERE id = ?', [gatheringId]);
-        res.json({ "message": "success", "id": result.insertId });
-    });
+    const sql = 'INSERT INTO gathering_comments (gathering_id, user_id, username, first_name, photo_url, comment) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id';
+    try {
+        const result = await pool.query(sql, [gatheringId, user_id, username, first_name, photo_url, comment]);
+        await pool.query('UPDATE gatherings SET comments_count = comments_count + 1 WHERE id = $1', [gatheringId]);
+        res.json({ "message": "success", "id": result.rows[0].id });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Update gathering comment (only owner)
-app.patch('/api/gathering-comments/:id', (req, res) => {
+app.patch('/api/gathering-comments/:id', async (req, res) => {
     const commentId = req.params.id;
     const userId = req.headers['x-user-id'];
     const { comment } = req.body;
 
     if (!userId) return res.status(401).json({ "error": "Unauthorized" });
 
-    pool.query('SELECT user_id FROM gathering_comments WHERE id = ?', [commentId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (rows.length === 0) return res.status(404).json({ "error": "Comment not found" });
+    try {
+        const result = await pool.query('SELECT user_id FROM gathering_comments WHERE id = $1', [commentId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Comment not found" });
 
-        if (String(rows[0].user_id) !== String(userId)) {
+        if (String(result.rows[0].user_id) !== String(userId)) {
             return res.status(403).json({ "error": "Forbidden" });
         }
 
-        pool.query('UPDATE gathering_comments SET comment = ? WHERE id = ?', [comment, commentId], (err) => {
-            if (err) return res.status(500).json({ "error": err.message });
-            res.json({ "message": "updated" });
-        });
-    });
+        await pool.query('UPDATE gathering_comments SET comment = $1 WHERE id = $2', [comment, commentId]);
+        res.json({ "message": "updated" });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Delete gathering comment (only owner)
-app.delete('/api/gathering-comments/:id', (req, res) => {
+app.delete('/api/gathering-comments/:id', async (req, res) => {
     const commentId = req.params.id;
     const userId = req.headers['x-user-id'];
 
     if (!userId) return res.status(401).json({ "error": "Unauthorized" });
 
-    pool.query('SELECT user_id, gathering_id FROM gathering_comments WHERE id = ?', [commentId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (rows.length === 0) return res.status(404).json({ "error": "Comment not found" });
+    try {
+        const result = await pool.query('SELECT user_id, gathering_id FROM gathering_comments WHERE id = $1', [commentId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Comment not found" });
 
-        if (String(rows[0].user_id) !== String(userId)) {
+        if (String(result.rows[0].user_id) !== String(userId)) {
             return res.status(403).json({ "error": "Forbidden" });
         }
 
-        const gatheringId = rows[0].gathering_id;
+        const gatheringId = result.rows[0].gathering_id;
 
-        pool.query('DELETE FROM gathering_comments WHERE id = ?', [commentId], (err) => {
-            if (err) return res.status(500).json({ "error": err.message });
+        await pool.query('DELETE FROM gathering_comments WHERE id = $1', [commentId]);
 
-            // Decrease comments count
-            pool.query('UPDATE gatherings SET comments_count = comments_count - 1 WHERE id = ?', [gatheringId]);
+        // Decrease comments count
+        await pool.query('UPDATE gatherings SET comments_count = comments_count - 1 WHERE id = $1', [gatheringId]);
 
-            res.json({ "message": "deleted" });
-        });
-    });
+        res.json({ "message": "deleted" });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
-setInterval(() => {
+setInterval(async () => {
     const warsawNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
     const currentDate = getWarsawDate();
 
@@ -683,68 +673,74 @@ setInterval(() => {
     const futureMinute = String(futureTime.getMinutes()).padStart(2, '0');
     const targetTime = `${futureHour}:${futureMinute}`;
 
-    pool.query(
-        'SELECT * FROM bookings WHERE date = ? AND slot_time = ? AND notified = 0',
-        [currentDate, targetTime],
-        (err, rows) => {
-            if (err) return console.error('Notification check error:', err);
+    try {
+        const result = await pool.query(
+            'SELECT * FROM bookings WHERE date = $1 AND slot_time = $2 AND notified = FALSE',
+            [currentDate, targetTime]
+        );
 
-            rows.forEach(booking => {
-                bot.sendMessage(
+        for (const booking of result.rows) {
+            try {
+                await bot.sendMessage(
                     booking.user_id,
                     `🎮 Напоминание!\n\nТвоя бронь PS Zone начнется через 15 минут (${booking.slot_time}).\n\nУспей прийти! 🕹️`
-                ).then(() => {
-                    pool.query('UPDATE bookings SET notified = 1 WHERE id = ?', [booking.id]);
-                    console.log(`Notification sent to ${booking.username} for booking at ${booking.slot_time}`);
-                }).catch(err => console.error('Send message error:', err));
-            });
+                );
+                await pool.query('UPDATE bookings SET notified = TRUE WHERE id = $1', [booking.id]);
+                console.log(`Notification sent to ${booking.username} for booking at ${booking.slot_time}`);
+            } catch (err) {
+                console.error('Send message error:', err);
+            }
         }
-    );
+    } catch (err) {
+        console.error('Notification check error:', err);
+    }
 }, 60000); // Every minute
 
 // --- Reviews API ---
-app.post('/api/reviews', (req, res) => {
+app.post('/api/reviews', async (req, res) => {
     const { user_id, username, first_name, photo_url, category, message } = req.body;
 
     if (!message || !category) {
         return res.status(400).json({ "error": "Missing required fields" });
     }
 
-    // Check if user already has 3 reviews
-    pool.query('SELECT COUNT(*) as count FROM reviews WHERE user_id = ?', [user_id], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
+    try {
+        // Check if user already has 3 reviews
+        const result = await pool.query('SELECT COUNT(*) as count FROM reviews WHERE user_id = $1', [user_id]);
 
-        if (rows[0].count >= 3) {
+        if (parseInt(result.rows[0].count) >= 3) {
             return res.status(400).json({ "error": "Вы уже оставили максимум отзывов (3)" });
         }
 
-        const sql = 'INSERT INTO reviews (user_id, username, first_name, photo_url, category, message) VALUES (?,?,?,?,?,?)';
-        pool.query(sql, [user_id, username, first_name, photo_url, category, message], (err, result) => {
-            if (err) return res.status(500).json({ "error": err.message });
-            res.json({ "message": "success", "id": result.insertId });
-        });
-    });
+        const sql = 'INSERT INTO reviews (user_id, username, first_name, photo_url, category, message) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id';
+        const insertResult = await pool.query(sql, [user_id, username, first_name, photo_url, category, message]);
+        res.json({ "message": "success", "id": insertResult.rows[0].id });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
-app.get('/api/reviews', (req, res) => {
+app.get('/api/reviews', async (req, res) => {
     const userId = req.headers['x-user-id'];
 
     // Everyone sees all reviews
     const sql = `
         SELECT r.*, 
-               EXISTS(SELECT 1 FROM review_likes WHERE review_id = r.id AND user_id = ?) as user_liked
+               EXISTS(SELECT 1 FROM review_likes WHERE review_id = r.id AND user_id = $1) as user_liked
         FROM reviews r
         ORDER BY r.created_at DESC
     `;
 
-    pool.query(sql, [userId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        res.json({ "data": rows });
-    });
+    try {
+        const result = await pool.query(sql, [userId]);
+        res.json({ "data": result.rows });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Like/Unlike review
-app.post('/api/reviews/:id/like', (req, res) => {
+app.post('/api/reviews/:id/like', async (req, res) => {
     const reviewId = req.params.id;
     const userId = req.headers['x-user-id'];
 
@@ -752,40 +748,40 @@ app.post('/api/reviews/:id/like', (req, res) => {
         return res.status(401).json({ "error": "Unauthorized" });
     }
 
-    // Check if already liked
-    pool.query('SELECT * FROM review_likes WHERE review_id = ? AND user_id = ?', [reviewId, userId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
+    try {
+        // Check if already liked
+        const result = await pool.query('SELECT * FROM review_likes WHERE review_id = $1 AND user_id = $2', [reviewId, userId]);
 
-        if (rows.length > 0) {
+        if (result.rows.length > 0) {
             // Unlike
-            pool.query('DELETE FROM review_likes WHERE review_id = ? AND user_id = ?', [reviewId, userId], (err) => {
-                if (err) return res.status(500).json({ "error": err.message });
-                pool.query('UPDATE reviews SET likes_count = likes_count - 1 WHERE id = ?', [reviewId]);
-                res.json({ "message": "unliked" });
-            });
+            await pool.query('DELETE FROM review_likes WHERE review_id = $1 AND user_id = $2', [reviewId, userId]);
+            await pool.query('UPDATE reviews SET likes_count = likes_count - 1 WHERE id = $1', [reviewId]);
+            res.json({ "message": "unliked" });
         } else {
             // Like
-            pool.query('INSERT INTO review_likes (review_id, user_id) VALUES (?,?)', [reviewId, userId], (err) => {
-                if (err) return res.status(500).json({ "error": err.message });
-                pool.query('UPDATE reviews SET likes_count = likes_count + 1 WHERE id = ?', [reviewId]);
-                res.json({ "message": "liked" });
-            });
+            await pool.query('INSERT INTO review_likes (review_id, user_id) VALUES ($1,$2)', [reviewId, userId]);
+            await pool.query('UPDATE reviews SET likes_count = likes_count + 1 WHERE id = $1', [reviewId]);
+            res.json({ "message": "liked" });
         }
-    });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Get comments for a review
-app.get('/api/reviews/:id/comments', (req, res) => {
+app.get('/api/reviews/:id/comments', async (req, res) => {
     const reviewId = req.params.id;
 
-    pool.query('SELECT * FROM review_comments WHERE review_id = ? ORDER BY created_at ASC', [reviewId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        res.json({ "data": rows });
-    });
+    try {
+        const result = await pool.query('SELECT * FROM review_comments WHERE review_id = $1 ORDER BY created_at ASC', [reviewId]);
+        res.json({ "data": result.rows });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Add comment to review
-app.post('/api/reviews/:id/comments', (req, res) => {
+app.post('/api/reviews/:id/comments', async (req, res) => {
     const reviewId = req.params.id;
     const { user_id, username, first_name, photo_url, comment } = req.body;
 
@@ -793,70 +789,72 @@ app.post('/api/reviews/:id/comments', (req, res) => {
         return res.status(400).json({ "error": "Comment is required" });
     }
 
-    const sql = 'INSERT INTO review_comments (review_id, user_id, username, first_name, photo_url, comment) VALUES (?,?,?,?,?,?)';
-    pool.query(sql, [reviewId, user_id, username, first_name, photo_url, comment], (err, result) => {
-        if (err) return res.status(500).json({ "error": err.message });
+    const sql = 'INSERT INTO review_comments (review_id, user_id, username, first_name, photo_url, comment) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id';
+    try {
+        const result = await pool.query(sql, [reviewId, user_id, username, first_name, photo_url, comment]);
 
         // Update comments count
-        pool.query('UPDATE reviews SET comments_count = comments_count + 1 WHERE id = ?', [reviewId]);
+        await pool.query('UPDATE reviews SET comments_count = comments_count + 1 WHERE id = $1', [reviewId]);
 
-        res.json({ "message": "success", "id": result.insertId });
-    });
+        res.json({ "message": "success", "id": result.rows[0].id });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Update comment (only owner)
-app.patch('/api/comments/:id', (req, res) => {
+app.patch('/api/comments/:id', async (req, res) => {
     const commentId = req.params.id;
     const userId = req.headers['x-user-id'];
     const { comment } = req.body;
 
     if (!userId) return res.status(401).json({ "error": "Unauthorized" });
 
-    pool.query('SELECT user_id FROM review_comments WHERE id = ?', [commentId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (rows.length === 0) return res.status(404).json({ "error": "Comment not found" });
+    try {
+        const result = await pool.query('SELECT user_id FROM review_comments WHERE id = $1', [commentId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Comment not found" });
 
-        if (String(rows[0].user_id) !== String(userId)) {
+        if (String(result.rows[0].user_id) !== String(userId)) {
             return res.status(403).json({ "error": "Forbidden" });
         }
 
-        pool.query('UPDATE review_comments SET comment = ? WHERE id = ?', [comment, commentId], (err) => {
-            if (err) return res.status(500).json({ "error": err.message });
-            res.json({ "message": "updated" });
-        });
-    });
+        await pool.query('UPDATE review_comments SET comment = $1 WHERE id = $2', [comment, commentId]);
+        res.json({ "message": "updated" });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Delete comment (only owner)
-app.delete('/api/comments/:id', (req, res) => {
+app.delete('/api/comments/:id', async (req, res) => {
     const commentId = req.params.id;
     const userId = req.headers['x-user-id'];
 
     if (!userId) return res.status(401).json({ "error": "Unauthorized" });
 
-    pool.query('SELECT user_id, review_id FROM review_comments WHERE id = ?', [commentId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (rows.length === 0) return res.status(404).json({ "error": "Comment not found" });
+    try {
+        const result = await pool.query('SELECT user_id, review_id FROM review_comments WHERE id = $1', [commentId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Comment not found" });
 
-        if (String(rows[0].user_id) !== String(userId)) {
+        if (String(result.rows[0].user_id) !== String(userId)) {
             return res.status(403).json({ "error": "Forbidden" });
         }
 
-        const reviewId = rows[0].review_id;
+        const reviewId = result.rows[0].review_id;
 
-        pool.query('DELETE FROM review_comments WHERE id = ?', [commentId], (err) => {
-            if (err) return res.status(500).json({ "error": err.message });
+        await pool.query('DELETE FROM review_comments WHERE id = $1', [commentId]);
 
-            // Decrease comments count
-            pool.query('UPDATE reviews SET comments_count = comments_count - 1 WHERE id = ?', [reviewId]);
+        // Decrease comments count
+        await pool.query('UPDATE reviews SET comments_count = comments_count - 1 WHERE id = $1', [reviewId]);
 
-            res.json({ "message": "deleted" });
-        });
-    });
+        res.json({ "message": "deleted" });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Update review (only owner can edit)
-app.patch('/api/reviews/:id', (req, res) => {
+app.patch('/api/reviews/:id', async (req, res) => {
     const reviewId = req.params.id;
     const userId = req.headers['x-user-id'];
     const { category, message } = req.body;
@@ -865,24 +863,24 @@ app.patch('/api/reviews/:id', (req, res) => {
         return res.status(401).json({ "error": "Unauthorized" });
     }
 
-    // Check ownership
-    pool.query('SELECT user_id FROM reviews WHERE id = ?', [reviewId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (rows.length === 0) return res.status(404).json({ "error": "Review not found" });
+    try {
+        // Check ownership
+        const result = await pool.query('SELECT user_id FROM reviews WHERE id = $1', [reviewId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Review not found" });
 
-        if (String(rows[0].user_id) !== String(userId)) {
+        if (String(result.rows[0].user_id) !== String(userId)) {
             return res.status(403).json({ "error": "Вы можете редактировать только свои отзывы" });
         }
 
-        pool.query('UPDATE reviews SET category = ?, message = ? WHERE id = ?', [category, message, reviewId], (err) => {
-            if (err) return res.status(500).json({ "error": err.message });
-            res.json({ "message": "updated" });
-        });
-    });
+        await pool.query('UPDATE reviews SET category = $1, message = $2 WHERE id = $3', [category, message, reviewId]);
+        res.json({ "message": "updated" });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // Delete review (only owner can delete)
-app.delete('/api/reviews/:id', (req, res) => {
+app.delete('/api/reviews/:id', async (req, res) => {
     const reviewId = req.params.id;
     const userId = req.headers['x-user-id'];
 
@@ -890,20 +888,20 @@ app.delete('/api/reviews/:id', (req, res) => {
         return res.status(401).json({ "error": "Unauthorized" });
     }
 
-    // Check ownership
-    pool.query('SELECT user_id FROM reviews WHERE id = ?', [reviewId], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (rows.length === 0) return res.status(404).json({ "error": "Review not found" });
+    try {
+        // Check ownership
+        const result = await pool.query('SELECT user_id FROM reviews WHERE id = $1', [reviewId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Review not found" });
 
-        if (String(rows[0].user_id) !== String(userId)) {
+        if (String(result.rows[0].user_id) !== String(userId)) {
             return res.status(403).json({ "error": "Вы можете удалять только свои отзывы" });
         }
 
-        pool.query('DELETE FROM reviews WHERE id = ?', [reviewId], (err) => {
-            if (err) return res.status(500).json({ "error": err.message });
-            res.json({ "message": "deleted" });
-        });
-    });
+        await pool.query('DELETE FROM reviews WHERE id = $1', [reviewId]);
+        res.json({ "message": "deleted" });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 bot.onText(/\/start/, (msg) => {
