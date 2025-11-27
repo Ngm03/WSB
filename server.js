@@ -266,6 +266,47 @@ function verifyTelegramWebAppData(telegramInitData) {
     }
 }
 
+
+
+// --- Rate Limiter ---
+const ipRequestCounts = new Map();
+const BLOCKED_IPS = new Set();
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+const MAX_REQUESTS = 20; // Max requests per window
+
+function getClientIp(req) {
+    return req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
+}
+
+function rateLimiter(req, res, next) {
+    const ip = getClientIp(req);
+
+    if (BLOCKED_IPS.has(ip)) {
+        console.log(`🚫 Blocked request from ${ip}`);
+        return res.status(403).json({ "error": "Your IP is blocked due to excessive requests." });
+    }
+
+    const now = Date.now();
+    const clientData = ipRequestCounts.get(ip) || { count: 0, startTime: now };
+
+    // Reset window if expired
+    if (now - clientData.startTime > RATE_LIMIT_WINDOW) {
+        clientData.count = 0;
+        clientData.startTime = now;
+    }
+
+    clientData.count++;
+    ipRequestCounts.set(ip, clientData);
+
+    if (clientData.count > MAX_REQUESTS) {
+        BLOCKED_IPS.add(ip);
+        console.log(`🛑 IP BLOCKED: ${ip} exceeded limit (${clientData.count})`);
+        return res.status(429).json({ "error": "Too many requests. You are blocked." });
+    }
+
+    next();
+}
+
 // --- API Endpoints ---
 
 app.get('/health', (req, res) => {
@@ -696,9 +737,20 @@ setInterval(async () => {
     }
 }, 60000);
 
-app.post('/api/reviews', async (req, res) => {
+// --- User Rate Limiter ---
+const userRequestCounts = new Map();
+const BLOCKED_USERS = new Set();
+const USER_RATE_LIMIT_WINDOW = 5 * 60 * 1000; // 5 minutes
+const USER_MAX_REQUESTS = 10; // Max requests per window
+
+app.post('/api/reviews', rateLimiter, async (req, res) => {
     const { user_id, username, first_name, photo_url, category, message } = req.body;
     const initData = req.headers['x-telegram-init-data'];
+
+    // 0. Check if User is Blocked
+    if (BLOCKED_USERS.has(String(user_id))) {
+        return res.status(403).json({ "error": "Your account is temporarily blocked due to suspicious activity." });
+    }
 
     // 1. Validate Telegram Data
     const validatedUser = verifyTelegramWebAppData(initData);
@@ -706,9 +758,27 @@ app.post('/api/reviews', async (req, res) => {
         return res.status(403).json({ "error": "Unauthorized: Invalid Telegram Data" });
     }
 
-    // 2. Ensure the user_id matches the validated data (prevent spoofing)
+    // 2. Ensure the user_id matches the validated data
     if (String(validatedUser.id) !== String(user_id)) {
         return res.status(403).json({ "error": "Unauthorized: User ID mismatch" });
+    }
+
+    // 3. User Rate Limiting (Track verified requests)
+    const now = Date.now();
+    const userData = userRequestCounts.get(String(user_id)) || { count: 0, startTime: now };
+
+    if (now - userData.startTime > USER_RATE_LIMIT_WINDOW) {
+        userData.count = 0;
+        userData.startTime = now;
+    }
+
+    userData.count++;
+    userRequestCounts.set(String(user_id), userData);
+
+    if (userData.count > USER_MAX_REQUESTS) {
+        BLOCKED_USERS.add(String(user_id));
+        console.log(`🛑 USER BLOCKED: ${user_id} exceeded limit (${userData.count})`);
+        return res.status(429).json({ "error": "Too many requests. Account blocked." });
     }
 
     if (!message || !category) {
