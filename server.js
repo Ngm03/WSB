@@ -19,7 +19,24 @@ const fullWebhookUrl = RENDER_PUBLIC_URL + WEBHOOK_PATH;
 
 // Инициализация бота: webhook для production, polling для development
 const useWebhook = process.env.NODE_ENV === 'production' || process.env.USE_WEBHOOK === 'true';
-const bot = new TelegramBot(token, { polling: !useWebhook });
+
+let botOptions = {};
+
+if (useWebhook) {
+    // Production mode: используем webhook
+    botOptions = {
+        webHook: {
+            port: PORT
+        }
+    };
+    console.log('🌐 Bot will use WEBHOOK mode (production)');
+} else {
+    // Development mode: используем polling
+    botOptions = { polling: true };
+    console.log('🔄 Bot running in POLLING mode (development)');
+}
+
+const bot = new TelegramBot(token, botOptions);
 
 // Handle polling errors (только для development)
 if (!useWebhook) {
@@ -30,9 +47,6 @@ if (!useWebhook) {
             console.error('[Telegram Bot] Polling error:', error.code || error.message);
         }
     });
-    console.log('🔄 Bot running in POLLING mode (development)');
-} else {
-    console.log('🌐 Bot will use WEBHOOK mode (production)');
 }
 
 // Setup PostgreSQL Connection Pool
