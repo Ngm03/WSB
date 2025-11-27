@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Общежитие - PS Zone</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/booking.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <header>
+        <svg class="icon" style="width:28px;height:28px;color:var(--primary);" viewBox="0 0 24 24">
+            <path
+                d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+        </svg>
+        <h1 id="page-title">Бронь PS Zone - 3 Этаж</h1>
+    </header>
+
+    <div class="container">
+
+        <!-- Floor Switcher -->
+        <div class="floor-switcher">
+            <div class="floor-option active" data-floor="3" data-i18n="floor3">3 Этаж</div>
+            <div class="floor-option" data-floor="1" data-i18n="floor1">1 Этаж</div>
+        </div>
+
+        <!-- Calendar Section -->
+        <div class="calendar-wrapper">
+            <div class="calendar-header">
+                <button id="prev-month" class="icon-btn">&lt;</button>
+                <h2 id="month-title">Ноябрь 2025</h2>
+                <button id="next-month" class="icon-btn">&gt;</button>
+            </div>
+            <div class="calendar-grid" id="calendar-grid">
+                <!-- Days will be generated here -->
+            </div>
+        </div>
+
+        <!-- Schedule Section -->
+        <div class="schedule-section">
+            <h3 id="selected-date-title" data-i18n="selectDate">Выберите дату</h3>
+            <div id="schedule-list" class="schedule-list">
+                <!-- Bookings for the day -->
+                <div class="modal-title" data-i18n="newBooking">Новая бронь</div>
+                <div class="sheet-date" id="sheet-date">26 Ноября</div>
+
+                <form id="booking-form">
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label data-i18n="start">Начало</label>
+                            <div class="custom-input" id="trigger-start">--:--</div>
+                            <input type="hidden" id="b-start" required>
+                        </div>
+                        <div class="form-group half">
+                            <label data-i18n="end">Конец</label>
+                            <div class="custom-input" id="trigger-end">--:--</div>
+                            <input type="hidden" id="b-end" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="comment">Комментарий</label>
+                        <textarea id="b-comment" rows="2" placeholder="FIFA, Mortal Kombat..."
+                            data-i18n-placeholder="commentPlaceholder"></textarea>
+                    </div>
+                    <button type="submit" class="btn" data-i18n="bookButton">Забронировать</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Details Modal (Bottom Sheet) -->
+        <div class="modal-overlay" id="details-overlay">
+            <div class="bottom-sheet">
+                <div class="sheet-handle"></div>
+                <div class="modal-title" data-i18n="bookingDetails">Детали брони</div>
+
+                <div class="details-content">
+                    <!-- Header Card with Time & Date -->
+                    <div class="details-header-card">
+                        <div class="details-time-row">
+                            <div class="time-badge">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                                <span id="d-time">14:00 - 16:00</span>
+                            </div>
+                            <div class="duration-badge" id="d-duration">2ч 0мин</div>
+                        </div>
+                        <div class="details-date-row">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                <line x1="16" y1="2" x2="16" y2="6"></line>
+                                <line x1="8" y1="2" x2="8" y2="6"></line>
+                                <line x1="3" y1="10" x2="21" y2="10"></line>
+                            </svg>
+                            <span id="d-date">26 Ноября</span>
+                        </div>
+                    </div>
+
+                    <!-- User Info Section -->
+                    <div class="details-user-section">
+                        <div class="user-avatar-wrapper">
+                            <img src="" id="d-avatar" class="details-avatar" alt="Avatar">
+                            <div class="user-status-indicator"></div>
+                        </div>
+                        <div class="user-info-text">
+                            <div class="label-text" data-i18n="bookedBy">Бронирует</div>
+                            <div class="details-name" id="d-name">Username</div>
+                        </div>
+                    </div>
+
+                    <!-- Comment Section -->
+                    <div class="details-comment-section">
+                        <div class="section-label" data-i18n="comment">Комментарий</div>
+                        <div class="comment-box">
+                            <div class="details-comment" id="d-comment">
+                                Комментарий...
+                            </div>
+                            <button id="btn-translate-comment" class="translate-btn" style="display: none;"
+                                title="Перевести">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14.5 17h6.5" />
+                                </svg>
+                                <span data-i18n="translate">Перевести</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="details-actions">
+                        <button class="btn-action edit" id="btn-edit-booking" style="display: none;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                            <span data-i18n="edit">Редактировать</span>
+                        </button>
+                        <button class="btn-action delete" id="btn-delete-booking" style="display: none;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path
+                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                </path>
+                            </svg>
+                            <span data-i18n="delete">Удалить</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scroll Time Picker Modal -->
+        <div class="modal-overlay" id="time-picker-overlay">
+            <div class="bottom-sheet" id="time-picker-sheet">
+                <div class="sheet-handle"></div>
+                <div class="modal-title" data-i18n="selectTime">Выберите время</div>
+
+                <div class="time-picker-container">
+                    <div class="picker-highlight"></div>
+                    <div class="time-picker-column" id="tp-hours"></div>
+                    <div class="time-picker-column" id="tp-minutes"></div>
+                </div>
+
+                <button class="btn" id="tp-confirm" style="margin-top:20px;" data-i18n="done">Готово</button>
+            </div>
+        </div>
+
+        <!-- Nav will be injected by nav.js -->
+        <script src="js/nav.js"></script>
+        <script src="js/booking.js"></script>
+</body>
+
+</html>

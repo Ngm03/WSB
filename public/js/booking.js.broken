@@ -1,0 +1,1015 @@
+const tg = window.Telegram.WebApp;
+
+// Initialize
+tg.expand();
+tg.MainButton.textColor = '#FFFFFF';
+tg.MainButton.color = '#7c3aed';
+
+const API_URL = '/api';
+
+// --- Language Detection & User Sync ---
+
+const getUserLanguage = () => {
+    console.log('=== Language Detection Debug ===');
+
+    // 1. Try Browser Language (Priority #1)
+    const browserLang = navigator.language || navigator.userLanguage;
+    if (browserLang) {
+        const lang = browserLang.split('-')[0];
+        console.log('✅ Using navigator.language (Priority #1):', lang);
+        return lang;
+    }
+
+    // 2. Try Telegram User Object
+    if (tg.initDataUnsafe?.user?.language_code) {
+        console.log('✅ Using tg.initDataUnsafe.user.language_code:', tg.initDataUnsafe.user.language_code);
+        return tg.initDataUnsafe.user.language_code;
+    }
+
+    // 3. Try Telegram API direct property
+    if (tg.languageCode) {
+        console.log('✅ Using tg.languageCode:', tg.languageCode);
+        return tg.languageCode;
+    }
+
+    console.log('⚠️ Using default: en');
+    return 'en';
+};
+
+// FOR TESTING: Use 'test_user_123' if on localhost and not in Telegram
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const fallbackId = isLocalhost ? 'test_user_123' : 'guest';
+const fallbackName = isLocalhost ? 'Test User' : 'Guest';
+
+let currentUser = {
+    id: tg.initDataUnsafe?.user?.id || fallbackId,
+    username: tg.initDataUnsafe?.user?.username || fallbackName,
+    first_name: tg.initDataUnsafe?.user?.first_name || fallbackName,
+    photo_url: tg.initDataUnsafe?.user?.photo_url || null,
+    language_code: getUserLanguage()
+};
+
+// Listen for browser language changes
+window.addEventListener('languagechange', () => {
+    console.log('🌐 Browser language changed!');
+    const newLang = getUserLanguage();
+
+    if (newLang !== currentUser.language_code) {
+        console.log(`🔄 Updating language from ${currentUser.language_code} to ${newLang}`);
+        currentUser.language_code = newLang;
+        syncUserData();
+    }
+});
+
+console.log(`✅ Final Language detected: ${currentUser.language_code}`);
+
+// Sync user data with server on page load (updates language in DB)
+async function syncUserData() {
+    console.log('🔄 Syncing user data...', currentUser);
+
+    if (currentUser.id === 'guest') {
+        console.warn('⚠️ Sync skipped: User is "guest". Open in Telegram to sync with DB.');
+        return;
+    }
+
+    try {
+        await fetch(`${API_URL}/user/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: currentUser.id,
+                username: currentUser.username,
+                first_name: currentUser.first_name,
+                photo_url: currentUser.photo_url,
+                language_code: currentUser.language_code
+            })
+        });
+        console.log('✅ User data synced with server');
+    } catch (error) {
+        console.error('User sync failed:', error);
+    }
+}
+
+// Sync immediately
+syncUserData();
+
+// --- Translations ---
+
+const translations = {
+    ru: {
+        pageTitle: 'Бронь PS Zone - 3 Этаж',
+        pageTitleFloor1: 'Бронь PS Zone - 1 Этаж',
+        floor3: '3 Этаж',
+        floor1: '1 Этаж',
+        selectDate: 'Выберите дату',
+        newBooking: 'Новая бронь',
+        start: 'Начало',
+        end: 'Конец',
+        comment: 'Комментарий',
+        commentPlaceholder: 'FIFA, Mortal Kombat...',
+        bookButton: 'Забронировать',
+        bookingDetails: 'Детали брони',
+        bookedBy: 'Бронирует',
+        edit: 'Редактировать',
+        delete: 'Удалить',
+        selectTime: 'Выберите время',
+        done: 'Готово',
+        translate: 'Перевести',
+        hours: 'ч',
+        minutes: 'мин',
+        noBookings: 'На этот день пока нет бронирований',
+        clickPlus: 'Нажмите +, чтобы занять время',
+        loadError: 'Ошибка загрузки'
+    },
+    en: {
+        pageTitle: 'PS Zone Booking - 3rd Floor',
+        pageTitleFloor1: 'PS Zone Booking - 1st Floor',
+        floor3: '3rd Floor',
+        floor1: '1st Floor',
+        selectDate: 'Select a date',
+        newBooking: 'New Booking',
+        start: 'Start',
+        end: 'End',
+        comment: 'Comment',
+        commentPlaceholder: 'FIFA, Mortal Kombat...',
+        bookButton: 'Book',
+        bookingDetails: 'Booking Details',
+        bookedBy: 'Booked by',
+        edit: 'Edit',
+        delete: 'Delete',
+        selectTime: 'Select time',
+        done: 'Done',
+        translate: 'Translate',
+        hours: 'h',
+        minutes: 'min',
+        noBookings: 'No bookings for this day yet',
+        clickPlus: 'Click + to book a time slot',
+        loadError: 'Loading error'
+    },
+    pl: {
+        pageTitle: 'Rezerwacja PS Zone - 3 Piętro',
+        pageTitleFloor1: 'Rezerwacja PS Zone - 1 Piętro',
+        floor3: '3 Piętro',
+        floor1: '1 Piętro',
+        selectDate: 'Wybierz datę',
+        newBooking: 'Nowa Rezerwacja',
+        start: 'Początek',
+        end: 'Koniec',
+        comment: 'Komentarz',
+        commentPlaceholder: 'FIFA, Mortal Kombat...',
+        bookButton: 'Zarezerwuj',
+        bookingDetails: 'Szczegóły Rezerwacji',
+        bookedBy: 'Zarezerwowane przez',
+        edit: 'Edytuj',
+        delete: 'Usuń',
+        selectTime: 'Wybierz czas',
+        done: 'Gotowe',
+        translate: 'Przetłumacz',
+        hours: 'godz',
+        minutes: 'min',
+        noBookings: 'Brak rezerwacji na ten dzień',
+        clickPlus: 'Kliknij +, aby zarezerwować czas',
+        loadError: 'Błąd ładowania'
+    }
+};
+
+let t = translations[['ru', 'en', 'pl'].includes(currentUser.language_code) ? currentUser.language_code : 'en'];
+
+function updateInterface() {
+    const lang = currentUser.language_code || 'en';
+    t = translations[lang] || translations['en'];
+
+    // Update static elements
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (t[key]) el.textContent = t[key];
+    });
+
+    // Update placeholders
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if (t[key]) el.placeholder = t[key];
+    });
+
+    // Update page title based on current floor
+    const pageTitle = document.getElementById('page-title');
+    if (pageTitle && currentFloor) {
+        pageTitle.textContent = currentFloor === '3' ? t.pageTitle : t.pageTitleFloor1;
+    }
+
+    // Re-render calendar month name if needed
+    renderCalendar();
+}
+
+// Call on page load
+document.addEventListener('DOMContentLoaded', () => {
+    updateInterface();
+});
+
+// Listen for language changes
+window.addEventListener('languagechange', () => {
+    const newLang = getUserLanguage();
+    if (newLang !== currentUser.language_code) {
+        currentUser.language_code = newLang;
+        updateInterface();
+        syncUserData();
+    }
+});
+
+// --- Helper Functions ---
+
+// Get current date in Warsaw timezone
+function getWarsawDate() {
+    const now = new Date();
+    const options = { timeZone: 'Europe/Warsaw', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' };
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(now);
+
+    const dateParts = {};
+    parts.forEach(p => dateParts[p.type] = p.value);
+
+    return new Date(dateParts.year, dateParts.month - 1, dateParts.day, dateParts.hour, dateParts.minute, dateParts.second);
+}
+
+function formatDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function calculateDuration(start, end) {
+    const [h1, m1] = start.split(':').map(Number);
+    const [h2, m2] = end.split(':').map(Number);
+    let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+    if (diff < 0) diff += 1440; // Add 24 hours for cross-day
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    return `${h}${t.hours} ${m > 0 ? m + t.minutes : ''}`;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// --- State ---
+
+let currentMonth = getWarsawDate();
+let selectedDate = getWarsawDate();
+let bookings = [];
+let currentFloor = '3'; // Default to 3rd floor
+let tpTarget = null; // 'start' or 'end'
+let selectedHour = '12';
+let selectedMinute = '00';
+let currentEditingBooking = null;
+
+// --- Floor Switcher ---
+
+document.querySelectorAll('.floor-option').forEach(opt => {
+    opt.onclick = () => {
+        document.querySelectorAll('.floor-option').forEach(el => el.classList.remove('active'));
+        opt.classList.add('active');
+        currentFloor = opt.dataset.floor;
+
+        const floorName = currentFloor === '3' ? '3 Этаж' : '1 Этаж';
+        document.getElementById('page-title').textContent = `Бронь PS Zone - ${floorName}`;
+
+        loadBookings();
+    };
+});
+
+// --- Calendar Logic ---
+
+function renderCalendar() {
+    const grid = document.getElementById('calendar-grid');
+    const monthTitle = document.getElementById('current-month');
+
+    grid.innerHTML = '';
+
+    const locale = currentUser.language_code === 'ru' ? 'ru-RU' : currentUser.language_code === 'pl' ? 'pl-PL' : 'en-US';
+    const options = { month: 'long', year: 'numeric' };
+    monthTitle.textContent = currentMonth.toLocaleDateString(locale, options);
+
+    const daysMap = {
+        'ru': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+        'en': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        'pl': ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nie']
+    };
+    const days = daysMap[currentUser.language_code] || daysMap['en'];
+    days.forEach(day => {
+        const el = document.createElement('div');
+        el.className = 'calendar-day-header';
+        el.textContent = day;
+        grid.appendChild(el);
+    });
+
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Empty cells
+    for (let i = 0; i < startOffset; i++) {
+        const el = document.createElement('div');
+        el.className = 'calendar-day empty';
+        grid.appendChild(el);
+    }
+
+    // Days
+    for (let i = 1; i <= daysInMonth; i++) {
+        const el = document.createElement('div');
+        el.className = 'calendar-day';
+        el.textContent = i;
+
+        const dateObj = new Date(year, month, i);
+        const dateStr = formatDate(dateObj);
+
+        // Today
+        const today = getWarsawDate();
+        if (i === today.getDate() && month === today.getMonth() && year === today.getFullYear()) {
+            el.classList.add('today');
+        }
+
+        // Selected
+        if (dateStr === formatDate(selectedDate)) {
+            el.classList.add('selected');
+        }
+
+        // Badges
+        const count = bookings.filter(b => b.date === dateStr).length;
+        if (count > 0) {
+            const badge = document.createElement('div');
+            badge.className = 'cal-badge';
+            badge.textContent = count > 9 ? '9+' : count;
+            el.appendChild(badge);
+        }
+
+        el.onclick = () => selectDate(new Date(year, month, i));
+        grid.appendChild(el);
+    }
+}
+
+function selectDate(date) {
+    selectedDate = date;
+    renderCalendar();
+    renderSchedule();
+}
+
+document.getElementById('prev-month').onclick = () => {
+    currentMonth.setMonth(currentMonth.getMonth() - 1);
+    renderCalendar();
+};
+
+document.getElementById('next-month').onclick = () => {
+    currentMonth.setMonth(currentMonth.getMonth() + 1);
+    renderCalendar();
+};
+
+// --- Schedule Logic ---
+
+async function loadBookings() {
+    const list = document.getElementById('schedule-list');
+    try {
+        const response = await fetch(`${API_URL}/bookings?floor=${currentFloor}`);
+        const data = await response.json();
+        bookings = data.data;
+        renderCalendar();
+        renderSchedule();
+    } catch (error) {
+        console.error('Error loading bookings:', error);
+        list.innerHTML = `<div style="text-align:center;padding:20px;color:red;">${t.loadError}</div>`;
+    }
+}
+
+function renderSchedule() {
+    const list = document.getElementById('schedule-list');
+    const title = document.getElementById('selected-date-title');
+    const fab = document.getElementById('fab-add-booking');
+
+    const dateStr = formatDate(selectedDate);
+    const locale = currentUser.language_code === 'ru' ? 'ru-RU' : currentUser.language_code === 'pl' ? 'pl-PL' : 'en-US';
+    const options = { day: 'numeric', month: 'long', weekday: 'long' };
+    title.textContent = selectedDate.toLocaleDateString(locale, options);
+
+    const dayBookings = bookings.filter(b => b.date === dateStr);
+    dayBookings.sort((a, b) => a.slot_time.localeCompare(b.slot_time));
+
+    list.innerHTML = '';
+
+    if (dayBookings.length === 0) {
+        list.innerHTML = `
+            <div style="text-align:center; padding: 40px; color: var(--text-secondary); animation: fadeInUp 0.4s ease-out;">
+                <p>${t.noBookings}</p>
+                <p style="font-size:13px; margin-top:8px;">${t.clickPlus}</p>
+            </div>
+        `;
+    } else {
+        dayBookings.forEach((booking, index) => {
+            const card = document.createElement('div');
+            card.className = 'booking-card';
+            card.style.animationDelay = `${index * 0.05}s`;
+
+            if (isTimePast(booking.date, booking.end_time)) card.classList.add('past');
+
+            const avatar = booking.photo_url
+                ? `<img src="${booking.photo_url}" class="booking-avatar">`
+                : `<div class="booking-avatar" style="display:flex;align-items:center;justify-content:center;font-size:10px;">${booking.first_name?.[0]}</div>`;
+
+            card.innerHTML = `
+                <div class="booking-time">
+                    <span class="time-start">${booking.slot_time}</span>
+                    <span class="time-end">${booking.end_time}</span>
+                </div>
+                <div class="booking-info">
+                    <div class="booking-user">
+                        ${avatar}
+                        <span>${escapeHtml(booking.first_name || booking.username)}</span>
+                    </div>
+                    <div class="booking-comment">${escapeHtml(booking.comment || 'Без комментария')}</div>
+                </div>
+                <div class="booking-status"></div>
+            `;
+
+            card.onclick = () => openDetailsModal(booking);
+            list.appendChild(card);
+        });
+    }
+
+    // Show FAB if today or future
+    const todayStr = formatDate(getWarsawDate());
+    if (dateStr >= todayStr) {
+        fab.style.display = 'flex';
+        fab.style.animation = 'none';
+        fab.offsetHeight; // trigger reflow
+        fab.style.animation = 'scaleIn 0.3s ease-out';
+    } else {
+        fab.style.display = 'none';
+    }
+}
+
+function isTimePast(dateStr, endTimeStr) {
+    const now = getWarsawDate();
+    const currentIso = formatDate(now);
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    if (dateStr < currentIso) return true;
+    if (dateStr === currentIso && endTimeStr < currentTime) return true;
+    return false;
+}
+
+// --- Booking Modal ---
+
+const modalOverlay = document.getElementById('booking-modal-overlay');
+const fab = document.getElementById('fab-add-booking');
+const form = document.getElementById('booking-form');
+
+fab.onclick = () => {
+    const locale = currentUser.language_code === 'ru' ? 'ru-RU' : currentUser.language_code === 'pl' ? 'pl-PL' : 'en-US';
+    const dateStr = selectedDate.toLocaleDateString(locale, { day: 'numeric', month: 'long' });
+    document.getElementById('sheet-date').textContent = dateStr;
+
+    // Reset form
+    document.getElementById('trigger-start').textContent = '--:--';
+    document.getElementById('trigger-end').textContent = '--:--';
+    document.getElementById('b-start').value = '';
+    document.getElementById('b-end').value = '';
+    document.getElementById('b-comment').value = '';
+
+    document.querySelectorAll('.custom-input').forEach(el => el.classList.remove('active'));
+    modalOverlay.classList.add('active');
+};
+
+modalOverlay.onclick = (e) => {
+    if (e.target === modalOverlay) {
+        modalOverlay.classList.remove('active');
+    }
+};
+
+// --- Time Picker (iOS Style) ---
+
+const tpModal = document.getElementById('time-picker-overlay');
+const tpHours = document.getElementById('tp-hours');
+const tpMinutes = document.getElementById('tp-minutes');
+const tpConfirm = document.getElementById('tp-confirm');
+const ITEM_HEIGHT = 44;
+
+function openTimePicker(target) {
+    tpTarget = target;
+    renderTimePickerItems();
+    tpModal.classList.add('active');
+    setTimeout(() => {
+        scrollToValue(tpHours, selectedHour);
+        scrollToValue(tpMinutes, selectedMinute);
+    }, 100);
+}
+
+function renderTimePickerItems() {
+    if (tpHours.children.length > 0) return;
+
+    tpHours.innerHTML = '';
+    tpMinutes.innerHTML = '';
+
+    for (let i = 0; i < 24; i++) {
+        const val = String(i).padStart(2, '0');
+        const el = document.createElement('div');
+        el.className = 'time-picker-item';
+        el.textContent = val;
+        el.dataset.value = val;
+        tpHours.appendChild(el);
+    }
+
+    for (let i = 0; i < 60; i++) {
+        const val = String(i).padStart(2, '0');
+        const el = document.createElement('div');
+        el.className = 'time-picker-item';
+        el.textContent = val;
+        el.dataset.value = val;
+        tpMinutes.appendChild(el);
+    }
+
+    setupScrollListener(tpHours, 'hour');
+    setupScrollListener(tpMinutes, 'minute');
+}
+
+function setupScrollListener(container, type) {
+    let isScrolling;
+    container.addEventListener('scroll', () => {
+        window.clearTimeout(isScrolling);
+        updateVisuals(container);
+        isScrolling = setTimeout(() => {
+            const index = Math.round(container.scrollTop / ITEM_HEIGHT);
+            const items = container.querySelectorAll('.time-picker-item');
+            if (items[index]) {
+                const val = items[index].dataset.value;
+                if (type === 'hour') selectedHour = val;
+                else selectedMinute = val;
+                container.scrollTo({ top: index * ITEM_HEIGHT, behavior: 'smooth' });
+            }
+        }, 100);
+    });
+}
+
+function updateVisuals(container) {
+    const center = container.scrollTop + (container.clientHeight / 2);
+    const items = container.querySelectorAll('.time-picker-item');
+    items.forEach(item => {
+        const itemCenter = item.offsetTop + (item.clientHeight / 2);
+        const dist = Math.abs(center - itemCenter);
+        if (dist < ITEM_HEIGHT / 2) {
+            item.classList.add('selected');
+            item.style.opacity = 1;
+            item.style.transform = 'scale(1.1)';
+        } else {
+            item.classList.remove('selected');
+            item.style.opacity = 0.5;
+            item.style.transform = 'scale(1)';
+        }
+    });
+}
+
+function scrollToValue(container, value) {
+    const items = Array.from(container.querySelectorAll('.time-picker-item'));
+    const index = items.findIndex(el => el.dataset.value === value);
+    if (index !== -1) {
+        container.scrollTop = index * ITEM_HEIGHT;
+        updateVisuals(container);
+    }
+}
+
+document.getElementById('trigger-start').onclick = function () {
+    this.classList.add('active');
+    document.getElementById('trigger-end').classList.remove('active');
+    openTimePicker('start');
+};
+
+document.getElementById('trigger-end').onclick = function () {
+    this.classList.add('active');
+    document.getElementById('trigger-start').classList.remove('active');
+    openTimePicker('end');
+};
+
+tpConfirm.onclick = () => {
+    const timeStr = `${selectedHour}:${selectedMinute}`;
+    if (tpTarget === 'start') {
+        document.getElementById('trigger-start').textContent = timeStr;
+        document.getElementById('b-start').value = timeStr;
+    } else {
+        document.getElementById('trigger-end').textContent = timeStr;
+        document.getElementById('b-end').value = timeStr;
+    }
+    tpModal.classList.remove('active');
+};
+
+tpModal.onclick = (e) => {
+    if (e.target === tpModal) tpModal.classList.remove('active');
+};
+
+// --- Submit Booking ---
+
+form.onsubmit = async (e) => {
+    e.preventDefault();
+    const start = document.getElementById('b-start').value;
+    const end = document.getElementById('b-end').value;
+    const comment = document.getElementById('b-comment').value;
+
+    if (!start || !end) {
+        tg.showAlert('Выберите время начала и конца!');
+        return;
+    }
+
+    if (currentEditingBooking) {
+        if (start < currentEditingBooking.slot_time || end > currentEditingBooking.end_time) {
+            tg.showAlert('Можно только уменьшить время брони!');
+            return;
+        }
+    }
+
+    const dateStr = formatDate(selectedDate);
+    const url = currentEditingBooking ? `${API_URL}/bookings/${currentEditingBooking.id}` : `${API_URL}/bookings`;
+    const method = currentEditingBooking ? 'PUT' : 'POST';
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': currentUser.id
+            },
+            body: JSON.stringify({
+                user_id: currentUser.id,
+                username: currentUser.username,
+                first_name: currentUser.first_name,
+                photo_url: currentUser.photo_url,
+                language_code: currentUser.language_code, // Send language code
+                date: dateStr,
+                slot_time: start,
+                end_time: end,
+                floor: currentFloor,
+                comment: comment
+            })
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+            tg.showAlert(currentEditingBooking ? 'Бронь обновлена! ✅' : 'Успешно забронировано! 🎮');
+            modalOverlay.classList.remove('active');
+            currentEditingBooking = null;
+            document.querySelector('#booking-modal-overlay .modal-title').textContent = 'Новая бронь';
+            document.querySelector('#booking-form .btn').textContent = 'Забронировать';
+            loadBookings();
+        } else {
+            tg.showAlert(result.error || 'Ошибка');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        tg.showAlert('Ошибка сети');
+    }
+};
+
+// --- Details Modal ---
+
+const detailsOverlay = document.getElementById('details-overlay');
+
+function openDetailsModal(booking) {
+    const isOwner = String(booking.user_id) === String(currentUser.id);
+    const isAdmin = ['299696306'].includes(String(currentUser.id));
+
+    document.getElementById('d-time').textContent = `${booking.slot_time} - ${booking.end_time}`;
+
+    const dateObj = new Date(booking.date);
+    const locale = currentUser.language_code === 'ru' ? 'ru-RU' : currentUser.language_code === 'pl' ? 'pl-PL' : 'en-US';
+    const dateOptions = { day: 'numeric', month: 'long', weekday: 'long' };
+    document.getElementById('d-date').textContent = dateObj.toLocaleDateString(locale, dateOptions);
+    document.getElementById('d-duration').textContent = calculateDuration(booking.slot_time, booking.end_time);
+
+    const avatarEl = document.getElementById('d-avatar');
+    if (booking.photo_url) {
+        avatarEl.src = booking.photo_url;
+        avatarEl.style.display = 'block';
+    } else {
+        avatarEl.style.display = 'none';
+    }
+
+    document.getElementById('d-name').textContent = booking.first_name || booking.username;
+
+    const commentEl = document.getElementById('d-comment');
+    commentEl.textContent = booking.comment || 'Нет комментария';
+    delete commentEl.dataset.original;
+    commentEl.style.fontStyle = 'normal';
+    commentEl.style.color = '';
+
+    // Translate Button
+    const translateBtn = document.getElementById('btn-translate-comment');
+    if (booking.comment) {
+        translateBtn.style.display = 'block';
+        translateBtn.onclick = () => translateBookingComment(booking.comment, 'd-comment');
+    } else {
+        translateBtn.style.display = 'none';
+    }
+
+    const deleteBtn = document.getElementById('btn-delete-booking');
+    const editBtn = document.getElementById('btn-edit-booking');
+
+    if (isOwner || isAdmin) {
+        deleteBtn.style.display = 'block';
+        deleteBtn.onclick = () => deleteBooking(booking.id);
+        editBtn.style.display = 'block';
+        editBtn.onclick = () => editBooking(booking);
+        const el = document.createElement('div');
+        el.className = 'time-picker-item';
+        el.textContent = val;
+        el.dataset.value = val;
+        tpMinutes.appendChild(el);
+    }
+
+    setupScrollListener(tpHours, 'hour');
+    setupScrollListener(tpMinutes, 'minute');
+}
+
+function setupScrollListener(container, type) {
+    let isScrolling;
+    container.addEventListener('scroll', () => {
+        window.clearTimeout(isScrolling);
+        updateVisuals(container);
+        isScrolling = setTimeout(() => {
+            const index = Math.round(container.scrollTop / ITEM_HEIGHT);
+            const items = container.querySelectorAll('.time-picker-item');
+            if (items[index]) {
+                const val = items[index].dataset.value;
+                if (type === 'hour') selectedHour = val;
+                else selectedMinute = val;
+                container.scrollTo({ top: index * ITEM_HEIGHT, behavior: 'smooth' });
+            }
+        }, 100);
+    });
+}
+
+function updateVisuals(container) {
+    const center = container.scrollTop + (container.clientHeight / 2);
+    const items = container.querySelectorAll('.time-picker-item');
+    items.forEach(item => {
+        const itemCenter = item.offsetTop + (item.clientHeight / 2);
+        const dist = Math.abs(center - itemCenter);
+        if (dist < ITEM_HEIGHT / 2) {
+            item.classList.add('selected');
+            item.style.opacity = 1;
+            item.style.transform = 'scale(1.1)';
+        } else {
+            item.classList.remove('selected');
+            item.style.opacity = 0.5;
+            item.style.transform = 'scale(1)';
+        }
+    });
+}
+
+function scrollToValue(container, value) {
+    const items = Array.from(container.querySelectorAll('.time-picker-item'));
+    const index = items.findIndex(el => el.dataset.value === value);
+    if (index !== -1) {
+        container.scrollTop = index * ITEM_HEIGHT;
+        updateVisuals(container);
+    }
+}
+
+document.getElementById('trigger-start').onclick = function () {
+    this.classList.add('active');
+    document.getElementById('trigger-end').classList.remove('active');
+    openTimePicker('start');
+};
+
+document.getElementById('trigger-end').onclick = function () {
+    this.classList.add('active');
+    document.getElementById('trigger-start').classList.remove('active');
+    openTimePicker('end');
+};
+
+tpConfirm.onclick = () => {
+    const timeStr = `${selectedHour}:${selectedMinute}`;
+    if (tpTarget === 'start') {
+        document.getElementById('trigger-start').textContent = timeStr;
+        document.getElementById('b-start').value = timeStr;
+    } else {
+        document.getElementById('trigger-end').textContent = timeStr;
+        document.getElementById('b-end').value = timeStr;
+    }
+    tpModal.classList.remove('active');
+};
+
+tpModal.onclick = (e) => {
+    if (e.target === tpModal) tpModal.classList.remove('active');
+};
+
+// --- Submit Booking ---
+
+form.onsubmit = async (e) => {
+    e.preventDefault();
+    const start = document.getElementById('b-start').value;
+    const end = document.getElementById('b-end').value;
+    const comment = document.getElementById('b-comment').value;
+
+    if (!start || !end) {
+        tg.showAlert('Выберите время начала и конца!');
+        return;
+    }
+
+    if (currentEditingBooking) {
+        if (start < currentEditingBooking.slot_time || end > currentEditingBooking.end_time) {
+            tg.showAlert('Можно только уменьшить время брони!');
+            return;
+        }
+    }
+
+    const dateStr = formatDate(selectedDate);
+    const url = currentEditingBooking ? `${API_URL}/bookings/${currentEditingBooking.id}` : `${API_URL}/bookings`;
+    const method = currentEditingBooking ? 'PUT' : 'POST';
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': currentUser.id
+            },
+            body: JSON.stringify({
+                user_id: currentUser.id,
+                username: currentUser.username,
+                first_name: currentUser.first_name,
+                photo_url: currentUser.photo_url,
+                language_code: currentUser.language_code, // Send language code
+                date: dateStr,
+                slot_time: start,
+                end_time: end,
+                floor: currentFloor,
+                comment: comment
+            })
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+            tg.showAlert(currentEditingBooking ? 'Бронь обновлена! ✅' : 'Успешно забронировано! 🎮');
+            modalOverlay.classList.remove('active');
+            currentEditingBooking = null;
+            document.querySelector('#booking-modal-overlay .modal-title').textContent = 'Новая бронь';
+            document.querySelector('#booking-form .btn').textContent = 'Забронировать';
+            loadBookings();
+        } else {
+            tg.showAlert(result.error || 'Ошибка');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        tg.showAlert('Ошибка сети');
+    }
+};
+
+// --- Details Modal ---
+
+const detailsOverlay = document.getElementById('details-overlay');
+
+function openDetailsModal(booking) {
+    const isOwner = String(booking.user_id) === String(currentUser.id);
+    const isAdmin = ['299696306'].includes(String(currentUser.id));
+
+    document.getElementById('d-time').textContent = `${booking.slot_time} - ${booking.end_time}`;
+
+    const dateObj = new Date(booking.date);
+    const locale = currentUser.language_code === 'ru' ? 'ru-RU' : currentUser.language_code === 'pl' ? 'pl-PL' : 'en-US';
+    const dateOptions = { day: 'numeric', month: 'long', weekday: 'long' };
+    document.getElementById('d-date').textContent = dateObj.toLocaleDateString(locale, dateOptions);
+    document.getElementById('d-duration').textContent = calculateDuration(booking.slot_time, booking.end_time);
+
+    const avatarEl = document.getElementById('d-avatar');
+    if (booking.photo_url) {
+        avatarEl.src = booking.photo_url;
+        avatarEl.style.display = 'block';
+    } else {
+        avatarEl.style.display = 'none';
+    }
+
+    document.getElementById('d-name').textContent = booking.first_name || booking.username;
+
+    const commentEl = document.getElementById('d-comment');
+    commentEl.textContent = booking.comment || 'Нет комментария';
+    delete commentEl.dataset.original;
+    commentEl.style.fontStyle = 'normal';
+    commentEl.style.color = '';
+
+    // Translate Button
+    const translateBtn = document.getElementById('btn-translate-comment');
+    if (booking.comment) {
+        translateBtn.style.display = 'block';
+        translateBtn.onclick = () => translateBookingComment(booking.comment, 'd-comment');
+    } else {
+        translateBtn.style.display = 'none';
+    }
+
+    const deleteBtn = document.getElementById('btn-delete-booking');
+    const editBtn = document.getElementById('btn-edit-booking');
+
+    if (isOwner || isAdmin) {
+        deleteBtn.style.display = 'block';
+        deleteBtn.onclick = () => deleteBooking(booking.id);
+        editBtn.style.display = 'block';
+        editBtn.onclick = () => editBooking(booking);
+    } else {
+        deleteBtn.style.display = 'none';
+        editBtn.style.display = 'none';
+    }
+
+    detailsOverlay.classList.add('active');
+}
+
+
+function editBooking(booking) {
+    currentEditingBooking = booking;
+    detailsOverlay.classList.remove('active');
+
+    selectedDate = new Date(booking.date);
+    document.getElementById('sheet-date').textContent = formatDate(selectedDate);
+    document.getElementById('trigger-start').textContent = booking.slot_time;
+    document.getElementById('trigger-end').textContent = booking.end_time;
+    document.getElementById('b-start').value = booking.slot_time;
+    document.getElementById('b-end').value = booking.end_time;
+    document.getElementById('b-comment').value = booking.comment || '';
+
+    document.querySelector('#booking-modal-overlay .modal-title').textContent = 'Редактирование';
+    document.querySelector('#booking-form .btn').textContent = 'Сохранить изменения';
+    modalOverlay.classList.add('active');
+}
+
+modalOverlay.onclick = (e) => {
+    if (e.target === modalOverlay) {
+        modalOverlay.classList.remove('active');
+        currentEditingBooking = null;
+        document.querySelector('#booking-modal-overlay .modal-title').textContent = 'Новая бронь';
+        document.querySelector('#booking-form .btn').textContent = 'Забронировать';
+    }
+};
+
+detailsOverlay.onclick = (e) => {
+    if (e.target === detailsOverlay) detailsOverlay.classList.remove('active');
+};
+
+async function deleteBooking(id) {
+    if (!confirm('Удалить бронь?')) return;
+    try {
+        const response = await fetch(`${API_URL}/bookings/${id}`, {
+            method: 'DELETE',
+            headers: { 'x-user-id': currentUser.id }
+        });
+        if (response.ok) {
+            detailsOverlay.classList.remove('active');
+            loadBookings();
+        } else {
+            tg.showAlert('Ошибка удаления');
+        }
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+async function translateBookingComment(originalText, elementId) {
+    const commentEl = document.getElementById(elementId);
+
+    // Check if already translated
+    if (commentEl.classList.contains('translated')) {
+        // Restore original
+        const original = commentEl.getAttribute('data-original');
+        if (original) {
+            commentEl.textContent = original;
+            commentEl.classList.remove('translated');
+            commentEl.style.fontStyle = 'normal';
+            commentEl.style.color = '';
+        }
+        return;
+    }
+
+    // Save original text
+    if (!commentEl.getAttribute('data-original')) {
+        commentEl.setAttribute('data-original', originalText);
+    }
+
+    const targetLang = currentUser.language_code || 'en';
+
+    try {
+        const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(originalText)}`);
+        const data = await response.json();
+
+        if (data && data[0] && data[0][0]) {
+            const translatedText = data[0].map(item => item[0]).join('');
+            commentEl.textContent = translatedText;
+            commentEl.classList.add('translated');
+            commentEl.style.fontStyle = 'italic';
+            commentEl.style.color = '#7c3aed';
+        }
+    } catch (error) {
+        console.error('Translation error:', error);
+        tg.showAlert(t.error || 'Translation failed');
+    }
+}
+
+
+// Start
+loadBookings();

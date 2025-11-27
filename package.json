@@ -1,0 +1,31 @@
+{
+    "name": "hackathon-telegram-bot",
+    "version": "1.0.0",
+    "description": "Telegram Mini App для хакатона",
+    "main": "server.js",
+    "scripts": {
+        "start": "concurrently \"node server.js\" \"ngrok http 3000\"",
+        "dev": "node server.js",
+        "server": "node server.js",
+        "ngrok": "ngrok http 3000"
+    },
+    "keywords": [
+        "telegram",
+        "bot",
+        "mini-app",
+        "hackathon"
+    ],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "body-parser": "^1.20.2",
+        "cors": "^2.8.5",
+        "express": "^4.18.2",
+        "mysql2": "^3.15.3",
+        "node-telegram-bot-api": "^0.64.0",
+        "sqlite3": "^5.1.7"
+    },
+    "devDependencies": {
+        "concurrently": "^9.2.1"
+    }
+}

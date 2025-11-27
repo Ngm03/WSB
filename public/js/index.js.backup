@@ -1,0 +1,580 @@
+// Telegram WebApp initialization
+const tg = window.Telegram.WebApp;
+tg.expand();
+tg.MainButton.textColor = '#FFFFFF';
+tg.MainButton.color = '#7c3aed';
+
+// API Configuration
+const API_URL = '/api';
+
+// Detect user language from Telegram
+const userLang = tg.initDataUnsafe?.user?.language_code || 'en';
+const supportedLangs = ['ru', 'en', 'pl'];
+const currentLang = supportedLangs.includes(userLang) ? userLang : 'en';
+
+// Translations
+const translations = {
+    ru: {
+        createGathering: '✨ Создать сбор',
+        editGathering: '✏️ Редактировать сбор',
+        title: 'Название',
+        time: 'Время',
+        description: 'Описание',
+        addPhoto: 'Добавить фото (макс 3)',
+        addingPhoto: 'Добавить фото',
+        maxPhotos: 'Максимум 3 фото',
+        createButton: 'Создать сбор',
+        saveButton: 'Сохранить изменения',
+        edit: 'Редактировать',
+        delete: 'Удалить',
+        deleteConfirm: 'Удалить этот сбор?',
+        deleted: 'Сбор удален',
+        created: 'Сбор создан! 🎉',
+        updated: 'Сбор обновлен! ✅',
+        error: 'Ошибка',
+        commentsСoon: 'Комментарии скоро! 💬',
+        noGatherings: 'Пока нет сборов',
+        createFirst: 'Создай первый и позови друзей! 🎉',
+        justNow: 'только что',
+        minutesAgo: 'мин назад',
+        hoursAgo: 'ч назад',
+        daysAgo: 'дн назад'
+    },
+    en: {
+        createGathering: '✨ Create Gathering',
+        editGathering: '✏️ Edit Gathering',
+        title: 'Title',
+        time: 'Time',
+        description: 'Description',
+        addPhoto: 'Add photo (max 3)',
+        addingPhoto: 'Add photo',
+        maxPhotos: 'Maximum 3 photos',
+        createButton: 'Create Gathering',
+        saveButton: 'Save Changes',
+        edit: 'Edit',
+        delete: 'Delete',
+        deleteConfirm: 'Delete this gathering?',
+        deleted: 'Gathering deleted',
+        created: 'Gathering created! 🎉',
+        updated: 'Gathering updated! ✅',
+        error: 'Error',
+        commentsSoon: 'Comments coming soon! 💬',
+        noGatherings: 'No gatherings yet',
+        createFirst: 'Create the first one and invite friends! 🎉',
+        justNow: 'just now',
+        minutesAgo: 'min ago',
+        hoursAgo: 'h ago',
+        daysAgo: 'd ago'
+    },
+    pl: {
+        createGathering: '✨ Utwórz Spotkanie',
+        editGathering: '✏️ Edytuj Spotkanie',
+        title: 'Tytuł',
+        time: 'Czas',
+        description: 'Opis',
+        addPhoto: 'Dodaj zdjęcie (maks 3)',
+        addingPhoto: 'Dodaj zdjęcie',
+        maxPhotos: 'Maksymalnie 3 zdjęcia',
+        createButton: 'Utwórz Spotkanie',
+        saveButton: 'Zapisz Zmiany',
+        edit: 'Edytuj',
+        delete: 'Usuń',
+        deleteConfirm: 'Usunąć to spotkanie?',
+        deleted: 'Spotkanie usunięte',
+        created: 'Spotkanie utworzone! 🎉',
+        updated: 'Spotkanie zaktualizowane! ✅',
+        error: 'Błąd',
+        commentsSoon: 'Komentarze wkrótce! 💬',
+        noGatherings: 'Brak spotkań',
+        createFirst: 'Utwórz pierwsze i zaproś znajomych! 🎉',
+        justNow: 'teraz',
+        minutesAgo: 'min temu',
+        hoursAgo: 'godz temu',
+        daysAgo: 'dni temu'
+    }
+};
+
+// Get translation
+function t(key) {
+    return translations[currentLang][key] || translations['en'][key] || key;
+}
+
+// Current user data from Telegram
+let currentUser = {
+    id: tg.initDataUnsafe?.user?.id || 'guest',
+    username: tg.initDataUnsafe?.user?.username || 'Guest',
+    first_name: tg.initDataUnsafe?.user?.first_name || 'Guest',
+    photo_url: tg.initDataUnsafe?.user?.photo_url || '',
+    language: currentLang
+};
+
+// SVG Icons
+const iconHeart = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
+const iconHeartFilled = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
+const iconComment = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
+const iconClock = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>`;
+const iconUsers = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`;
+const iconMoreVert = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>`;
+const iconEdit = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+const iconDelete = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+const iconTranslate = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"></path><path d="m4 14 6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="m22 22-5-10-5 10"></path><path d="M14 18h6"></path></svg>`;
+
+// Selected images for new gathering
+let selectedImages = [];
+let editingGatheringId = null;
+
+// Load all gatherings from API
+async function loadGatherings() {
+    try {
+        const response = await fetch(`${API_URL}/gatherings`, {
+            headers: { 'x-user-id': currentUser.id }
+        });
+        const result = await response.json();
+        const container = document.getElementById('gatherings-list');
+        container.innerHTML = '';
+
+        // Show empty state if no gatherings
+        if (result.data.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">${iconUsers}</div>
+                    <div class="empty-state-text">${t('noGatherings')}</div>
+                    <div class="empty-state-subtext">${t('createFirst')}</div>
+                </div>
+            `;
+            return;
+        }
+
+        // Render each gathering
+        result.data.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'card';
+
+            const timeAgo = getTimeAgo(item.created_at);
+            const isLiked = item.user_liked == 1;
+            const likeCount = item.likes_count || 0;
+            const commentCount = item.comments_count || 0;
+            const isOwner = item.user_id == currentUser.id;
+
+            // Avatar HTML
+            let avatarHTML;
+            if (item.user_photo) {
+                avatarHTML = `<img src="${item.user_photo}" class="post-avatar-img" alt="${esc(item.first_name || item.created_by)}">`;
+            } else {
+                const initials = getInitials(item.first_name || item.created_by);
+                avatarHTML = `<div class="post-avatar">${initials}</div>`;
+            }
+
+            // Images carousel HTML
+            let imagesHTML = '';
+            if (item.image_url) {
+                try {
+                    const images = JSON.parse(item.image_url);
+                    if (Array.isArray(images) && images.length > 0) {
+                        imagesHTML = `
+                            <div class="post-images-carousel" data-carousel-id="${item.id}">
+                                <div class="post-images-slider">
+                                    ${images.map(img => `<img src="${img}" class="post-image" alt="Post image">`).join('')}
+                                </div>
+                                ${images.length > 1 ? `
+                                    <button class="carousel-nav prev">‹</button>
+                                    <button class="carousel-nav next">›</button>
+                                    <div class="carousel-dots">
+                                        ${images.map((_, i) => `<div class="carousel-dot ${i === 0 ? 'active' : ''}" data-index="${i}"></div>`).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }
+                } catch (e) {
+                    // Fallback for old single image format
+                    if (item.image_url) {
+                        imagesHTML = `
+                            <div class="post-images-carousel">
+                                <div class="post-images-slider">
+                                    <img src="${item.image_url}" class="post-image" alt="Post image">
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            // Build card HTML
+            card.innerHTML = `
+                <div class="card-header">
+                    ${avatarHTML}
+                    <div class="post-user-info">
+                        <div class="post-username">${esc(item.first_name || item.created_by)}</div>
+                        <div class="post-timestamp">${timeAgo}</div>
+                    </div>
+                    ${isOwner ? `
+                        <div class="post-menu">
+                            <button class="menu-btn" data-id="${item.id}">
+                                ${iconMoreVert}
+                            </button>
+                            <div class="menu-dropdown" id="menu-${item.id}">
+                                <button class="menu-item edit-btn" data-id="${item.id}">
+                                    ${iconEdit}
+                                    <span>${t('edit')}</span>
+                                </button>
+                                <button class="menu-item delete-btn" data-id="${item.id}">
+                                    ${iconDelete}
+                                    <span>${t('delete')}</span>
+                                </button>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+                ${imagesHTML}
+                <div class="card-title">${esc(item.title)}</div>
+                <div class="card-time">${iconClock} ${esc(item.time)}</div>
+                <div class="card-desc" data-original="${esc(item.description)}" data-id="${item.id}">${esc(item.description)}</div>
+                <div class="card-footer">
+                    <div class="post-actions">
+                        <button class="action-btn like-btn ${isLiked ? 'liked' : ''}" data-id="${item.id}">
+                            ${isLiked ? iconHeartFilled : iconHeart}
+                            <span class="like-count">${likeCount}</span>
+                        </button>
+                        <button class="action-btn comment-btn" data-id="${item.id}">
+                            ${iconComment}
+                            <span class="comment-count">${commentCount}</span>
+                        </button>
+                        <button class="action-btn translate-btn" data-id="${item.id}" title="Перевести">
+                            ${iconTranslate}
+                        </button>
+                    </div>
+                    <div class="post-meta">
+                        ${new Date(item.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                    </div>
+                </div>
+            `;
+
+            // Attach event listeners
+            card.querySelector('.like-btn').onclick = () => toggleLike(item.id, card.querySelector('.like-btn'));
+            card.querySelector('.comment-btn').onclick = () => tg.showAlert(t('commentsSoon'));
+            card.querySelector('.translate-btn').onclick = () => translateDescription(item.id);
+
+            // Menu button
+            if (isOwner) {
+                const menuBtn = card.querySelector('.menu-btn');
+                const editBtn = card.querySelector('.edit-btn');
+                const deleteBtn = card.querySelector('.delete-btn');
+
+                menuBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleMenu(item.id);
+                };
+
+                editBtn.onclick = () => {
+                    closeAllMenus();
+                    openEditModal(item);
+                };
+
+                deleteBtn.onclick = () => {
+                    closeAllMenus();
+                    deleteGathering(item.id);
+                };
+            }
+
+            container.appendChild(card);
+
+            // Initialize carousel if images exist
+            const carousel = card.querySelector('.post-images-carousel');
+            if (carousel) {
+                initCarousel(carousel);
+            }
+        });
+    } catch (error) {
+        console.error('Error loading gatherings:', error);
+    }
+}
+
+// Toggle menu dropdown
+function toggleMenu(id) {
+    closeAllMenus();
+    const menu = document.getElementById(`menu-${id}`);
+    if (menu) {
+        menu.classList.toggle('active');
+    }
+}
+
+// Close all menus
+function closeAllMenus() {
+    document.querySelectorAll('.menu-dropdown').forEach(menu => {
+        menu.classList.remove('active');
+    });
+}
+
+// Translate description
+async function translateDescription(postId) {
+    const descEl = document.querySelector(`.card-desc[data-id="${postId}"]`);
+    if (!descEl) return;
+
+    const originalText = descEl.getAttribute('data-original');
+    const currentText = descEl.textContent;
+
+    // Toggle between original and translated
+    if (currentText !== originalText) {
+        descEl.textContent = originalText;
+        return;
+    }
+
+    try {
+        // Simple translation using Google Translate API (free tier)
+        const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ru&dt=t&q=${encodeURIComponent(originalText)}`);
+        const data = await response.json();
+
+        if (data && data[0] && data[0][0]) {
+            const translated = data[0].map(item => item[0]).join('');
+            descEl.textContent = translated;
+        }
+    } catch (error) {
+        console.error('Translation error:', error);
+        tg.showAlert('Ошибка перевода');
+    }
+}
+
+// Open edit modal
+function openEditModal(item) {
+    editingGatheringId = item.id;
+
+    // Parse images
+    let images = [];
+    try {
+        images = JSON.parse(item.image_url) || [];
+    } catch (e) {
+        if (item.image_url) images = [item.image_url];
+    }
+
+    selectedImages = images;
+
+    // Fill form
+    document.getElementById('g-title').value = item.title;
+    document.getElementById('g-time').value = item.time;
+    document.getElementById('g-desc').value = item.description;
+
+    // Update modal title
+    document.querySelector('.modal-title').textContent = '✏️ Редактировать сбор';
+
+    // Update button
+    const submitBtn = document.querySelector('#gathering-form button[type="submit"]');
+    submitBtn.innerHTML = `${iconEdit} Сохранить изменения`;
+
+    updateImagesPreview();
+    openModal('gathering-modal');
+}
+
+// Delete gathering
+async function deleteGathering(id) {
+    if (!confirm(t('deleteConfirm'))) return;
+
+    try {
+        const response = await fetch(`${API_URL}/gatherings/${id}`, {
+            method: 'DELETE',
+            headers: { 'x-user-id': currentUser.id }
+        });
+
+        if (response.ok) {
+            loadGatherings();
+            tg.showAlert(t('deleted'));
+        } else {
+            tg.showAlert(t('error'));
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        tg.showAlert(t('error'));
+    }
+}
+
+// Initialize Instagram-style carousel
+function initCarousel(carousel) {
+    const slider = carousel.querySelector('.post-images-slider');
+    const images = slider.querySelectorAll('.post-image');
+    const dots = carousel.querySelectorAll('.carousel-dot');
+    const prevBtn = carousel.querySelector('.carousel-nav.prev');
+    const nextBtn = carousel.querySelector('.carousel-nav.next');
+
+    if (images.length <= 1) return;
+
+    let currentIndex = 0;
+    let startX = 0;
+    let isDragging = false;
+
+    // Go to specific slide
+    function goToSlide(index) {
+        currentIndex = Math.max(0, Math.min(index, images.length - 1));
+        slider.style.transform = `translateX(-${currentIndex * 100}%)`;
+
+        // Update dots
+        dots.forEach((dot, i) => {
+            dot.classList.toggle('active', i === currentIndex);
+        });
+    }
+
+    // Navigation buttons
+    if (prevBtn) prevBtn.onclick = () => goToSlide(currentIndex - 1);
+    if (nextBtn) nextBtn.onclick = () => goToSlide(currentIndex + 1);
+
+    // Dots navigation
+    dots.forEach((dot, index) => {
+        dot.onclick = () => goToSlide(index);
+    });
+
+    // Touch/swipe support
+    carousel.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        isDragging = true;
+    });
+
+    carousel.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+    }, { passive: false });
+
+    carousel.addEventListener('touchend', (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+
+        const endX = e.changedTouches[0].clientX;
+        const diff = startX - endX;
+
+        // Swipe threshold: 50px
+        if (Math.abs(diff) > 50) {
+            if (diff > 0) {
+                goToSlide(currentIndex + 1);
+            } else {
+                goToSlide(currentIndex - 1);
+            }
+        }
+    });
+}
+
+// Toggle like on a post
+async function toggleLike(postId, button) {
+    try {
+        const response = await fetch(`${API_URL}/gatherings/${postId}/like`, {
+            method: 'POST',
+            headers: { 'x-user-id': currentUser.id }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            const likeCountEl = button.querySelector('.like-count');
+            let count = parseInt(likeCountEl.textContent);
+
+            if (result.message === 'liked') {
+                button.classList.add('liked');
+                button.innerHTML = `${iconHeartFilled}<span class="like-count">${count + 1}</span>`;
+            } else {
+                button.classList.remove('liked');
+                button.innerHTML = `${iconHeart}<span class="like-count">${count - 1}</span>`;
+            }
+        }
+    } catch (error) {
+        console.error('Error toggling like:', error);
+    }
+}
+
+// Get user initials for avatar
+function getInitials(name) {
+    if (!name) return '?';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+}
+
+uploadBtn.style.opacity = '1';
+uploadBtn.style.cursor = 'pointer';
+        }
+    } else {
+    container.style.display = 'none';
+    uploadBtnText.textContent = t('addPhoto');
+    uploadBtn.disabled = false;
+    uploadBtn.style.opacity = '1';
+    uploadBtn.style.cursor = 'pointer';
+}
+}
+
+// Remove single image
+function removeImage(index) {
+    selectedImages.splice(index, 1);
+    updateImagesPreview();
+}
+
+// Remove all images
+function removeAllImages() {
+    selectedImages = [];
+    updateImagesPreview();
+}
+
+// Open modal
+function openModal(id) {
+    document.getElementById(id).classList.add('active');
+}
+
+// Close modal
+function closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+    if (id === 'gathering-modal') {
+        removeAllImages();
+        editingGatheringId = null;
+        document.getElementById('gathering-form').reset();
+
+        // Reset modal
+        document.querySelector('.modal-title').textContent = '✨ Создать сбор';
+        const submitBtn = document.querySelector('#gathering-form button[type="submit"]');
+        submitBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> Создать сбор`;
+    }
+}
+
+// Escape HTML
+function esc(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadGatherings();
+
+    // FAB button
+    document.getElementById('fab-create').onclick = () => openModal('gathering-modal');
+
+    // Close modal buttons
+    document.querySelectorAll('.close-modal').forEach(btn => {
+        btn.onclick = () => closeModal('gathering-modal');
+    });
+
+    // Form submit
+    document.getElementById('gathering-form').onsubmit = createGathering;
+
+    // Image input
+    document.getElementById('g-image').onchange = handleImageSelect;
+
+    // Upload button
+    document.getElementById('btn-select-image').onclick = () => {
+        document.getElementById('g-image').click();
+    };
+
+    // Click outside modal to close
+    document.getElementById('gathering-modal').onclick = (e) => {
+        if (e.target.id === 'gathering-modal') {
+            closeModal('gathering-modal');
+        }
+    };
+
+    // Close menus when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.post-menu')) {
+            closeAllMenus();
+        }
+    });
+});
