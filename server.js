@@ -383,11 +383,42 @@ app.get('/api/bookings', async (req, res) => {
     }
 });
 
-app.post('/api/bookings', async (req, res) => {
+app.post('/api/bookings', rateLimiter, async (req, res) => {
     const { user_id, username, first_name, photo_url, language_code, date, slot_time, end_time, comment, floor = '3' } = req.body;
+    const initData = req.headers['x-telegram-init-data'];
 
-    if (user_id === 'guest') {
-        return res.status(403).json({ "error": "Booking not allowed for guests" });
+    // 0. Check if User is Blocked
+    if (BLOCKED_USERS.has(String(user_id))) {
+        return res.status(403).json({ "error": "Your account is temporarily blocked due to suspicious activity." });
+    }
+
+    // 1. Validate Telegram Data
+    const validatedUser = verifyTelegramWebAppData(initData);
+    if (!validatedUser) {
+        return res.status(403).json({ "error": "Unauthorized: Invalid Telegram Data" });
+    }
+
+    // 2. Ensure the user_id matches the validated data
+    if (String(validatedUser.id) !== String(user_id)) {
+        return res.status(403).json({ "error": "Unauthorized: User ID mismatch" });
+    }
+
+    // 3. User Rate Limiting
+    const now = Date.now();
+    const userData = userRequestCounts.get(String(user_id)) || { count: 0, startTime: now };
+
+    if (now - userData.startTime > USER_RATE_LIMIT_WINDOW) {
+        userData.count = 0;
+        userData.startTime = now;
+    }
+
+    userData.count++;
+    userRequestCounts.set(String(user_id), userData);
+
+    if (userData.count > USER_MAX_REQUESTS) {
+        BLOCKED_USERS.add(String(user_id));
+        console.log(`🛑 USER BLOCKED: ${user_id} exceeded limit (${userData.count})`);
+        return res.status(429).json({ "error": "Too many requests. Account blocked." });
     }
 
     if (!date || !slot_time || !end_time) {
@@ -460,7 +491,7 @@ app.post('/api/bookings', async (req, res) => {
     }
 });
 
-app.put('/api/bookings/:id', async (req, res) => {
+app.put('/api/bookings/:id', rateLimiter, async (req, res) => {
     const bookingId = req.params.id;
     const userId = req.headers['x-user-id'];
     const { slot_time, end_time, comment } = req.body;
@@ -520,7 +551,7 @@ app.put('/api/bookings/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/bookings/:id', async (req, res) => {
+app.delete('/api/bookings/:id', rateLimiter, async (req, res) => {
     const bookingId = req.params.id;
     const userId = req.headers['x-user-id'];
 
@@ -563,8 +594,44 @@ app.get('/api/gatherings', async (req, res) => {
     }
 });
 
-app.post('/api/gatherings', async (req, res) => {
+app.post('/api/gatherings', rateLimiter, async (req, res) => {
     const { title, time, description, created_by, user_id, first_name, user_photo, image_url } = req.body;
+    const initData = req.headers['x-telegram-init-data'];
+
+    // 0. Check if User is Blocked
+    if (BLOCKED_USERS.has(String(user_id))) {
+        return res.status(403).json({ "error": "Your account is temporarily blocked due to suspicious activity." });
+    }
+
+    // 1. Validate Telegram Data
+    const validatedUser = verifyTelegramWebAppData(initData);
+    if (!validatedUser) {
+        return res.status(403).json({ "error": "Unauthorized: Invalid Telegram Data" });
+    }
+
+    // 2. Ensure the user_id matches the validated data
+    if (String(validatedUser.id) !== String(user_id)) {
+        return res.status(403).json({ "error": "Unauthorized: User ID mismatch" });
+    }
+
+    // 3. User Rate Limiting
+    const now = Date.now();
+    const userData = userRequestCounts.get(String(user_id)) || { count: 0, startTime: now };
+
+    if (now - userData.startTime > USER_RATE_LIMIT_WINDOW) {
+        userData.count = 0;
+        userData.startTime = now;
+    }
+
+    userData.count++;
+    userRequestCounts.set(String(user_id), userData);
+
+    if (userData.count > USER_MAX_REQUESTS) {
+        BLOCKED_USERS.add(String(user_id));
+        console.log(`🛑 USER BLOCKED: ${user_id} exceeded limit (${userData.count})`);
+        return res.status(429).json({ "error": "Too many requests. Account blocked." });
+    }
+
     const sql = 'INSERT INTO gatherings (title, time, description, created_by, user_id, first_name, user_photo, image_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id';
     const params = [title, time, description, created_by, user_id, first_name, user_photo, image_url];
     try {
@@ -575,7 +642,7 @@ app.post('/api/gatherings', async (req, res) => {
     }
 });
 
-app.put('/api/gatherings/:id', async (req, res) => {
+app.put('/api/gatherings/:id', rateLimiter, async (req, res) => {
     const gatheringId = req.params.id;
     const userId = req.headers['x-user-id'];
     const { title, time, description, image_url } = req.body;
@@ -593,7 +660,7 @@ app.put('/api/gatherings/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/gatherings/:id', async (req, res) => {
+app.delete('/api/gatherings/:id', rateLimiter, async (req, res) => {
     const gatheringId = req.params.id;
     const userId = req.headers['x-user-id'];
 
