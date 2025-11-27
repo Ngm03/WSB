@@ -172,6 +172,14 @@ window.addEventListener('languagechange', () => {
 
 // --- Helper Functions ---
 
+function showTelegramAlert(message) {
+    if (window.Telegram?.WebApp?.showAlert) {
+        window.Telegram.WebApp.showAlert(message);
+    } else {
+        alert(message);
+    }
+}
+
 function formatDate(date) {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -487,18 +495,23 @@ tpModal.onclick = (e) => {
 
 form.onsubmit = async (e) => {
     e.preventDefault();
+
+    if (currentUser.id === 'guest') {
+        showTelegramAlert('Бронирование доступно только через Telegram Mini App!');
+        return;
+    }
     const start = document.getElementById('b-start').value;
     const end = document.getElementById('b-end').value;
     const comment = document.getElementById('b-comment').value;
 
     if (!start || !end) {
-        tg.showAlert('Выберите время начала и конца!');
+        showTelegramAlert('Выберите время начала и конца!');
         return;
     }
 
     if (currentEditingBooking) {
         if (start < currentEditingBooking.slot_time || end > currentEditingBooking.end_time) {
-            tg.showAlert('Можно только уменьшить время брони!');
+            showTelegramAlert('Можно только уменьшить время брони!');
             return;
         }
     }
@@ -530,18 +543,18 @@ form.onsubmit = async (e) => {
 
         const result = await response.json();
         if (response.ok) {
-            tg.showAlert(currentEditingBooking ? 'Бронь обновлена! ✅' : 'Успешно забронировано! 🎮');
+            showTelegramAlert(currentEditingBooking ? 'Бронь обновлена! ✅' : 'Успешно забронировано! 🎮');
             modalOverlay.classList.remove('active');
             currentEditingBooking = null;
             document.querySelector('#booking-modal-overlay .modal-title').textContent = 'Новая бронь';
             document.querySelector('#booking-form .btn').textContent = 'Забронировать';
             loadBookings();
         } else {
-            tg.showAlert(result.error || 'Ошибка');
+            showTelegramAlert(result.error || 'Ошибка');
         }
     } catch (error) {
         console.error('Error:', error);
-        tg.showAlert('Ошибка сети');
+        showTelegramAlert('Ошибка сети');
     }
 };
 
@@ -635,7 +648,7 @@ async function translateBookingComment(originalText, elementId) {
         }
     } catch (error) {
         console.error('Translation error:', error);
-        tg.showAlert('Translation failed');
+        showTelegramAlert('Translation failed');
     }
 }
 
@@ -683,7 +696,7 @@ async function deleteBooking(id) {
             detailsOverlay.classList.remove('active');
             loadBookings();
         } else {
-            tg.showAlert('Ошибка удаления');
+            showTelegramAlert('Ошибка удаления');
         }
     } catch (error) {
         console.error(error);
@@ -693,6 +706,10 @@ async function deleteBooking(id) {
 // --- FAB ---
 
 fab.onclick = () => {
+    if (currentUser.id === 'guest') {
+        showTelegramAlert('Бронирование доступно только через Telegram Mini App!');
+        return;
+    }
     const locale = currentUser.language_code === 'ru' ? 'ru-RU' : currentUser.language_code === 'pl' ? 'pl-PL' : 'en-US';
     const dateStr = selectedDate.toLocaleDateString(locale, { day: 'numeric', month: 'long' });
     document.getElementById('sheet-date').textContent = dateStr;
