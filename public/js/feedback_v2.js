@@ -261,31 +261,15 @@ function renderReviews() {
     const list = document.getElementById('feedback-list');
     list.innerHTML = '';
 
-    // Admin "Delete All" Button
+    // Admin "Delete All" Button Logic
     const ADMIN_IDS = ['299696306', '1300836384'];
     const isAdmin = ADMIN_IDS.includes(String(currentUser.id));
-    const listTitle = document.getElementById('list-title');
+    const adminBtn = document.getElementById('admin-delete-btn');
 
-    // Remove existing admin button if any
-    const existingBtn = document.getElementById('admin-delete-all');
-    if (existingBtn) existingBtn.remove();
-
-    if (isAdmin && listTitle) {
-        const btn = document.createElement('button');
-        btn.id = 'admin-delete-all';
-        btn.textContent = '🗑️ Удалить все (Админ)';
-        btn.style.cssText = `
-            background: #ef4444;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 12px;
-            margin-left: 10px;
-            cursor: pointer;
-        `;
-        btn.onclick = deleteAllReviews;
-        listTitle.appendChild(btn);
+    if (isAdmin && adminBtn) {
+        console.log('👑 Admin mode active');
+        adminBtn.style.display = 'block';
+        adminBtn.onclick = deleteAllReviews;
     }
 
     // Check if current user has a review
@@ -782,7 +766,8 @@ async function submitReview(e) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-user-id': currentUser.id
+                'x-user-id': currentUser.id,
+                'x-telegram-init-data': tg.initData
             },
             body: JSON.stringify({
                 user_id: currentUser.id,
