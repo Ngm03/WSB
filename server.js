@@ -282,7 +282,6 @@ function rateLimiter(req, res, next) {
     const ip = getClientIp(req);
 
     if (BLOCKED_IPS.has(ip)) {
-        console.log(`🚫 Blocked request from ${ip}`);
         return res.status(403).json({ "error": "Your IP is blocked due to excessive requests." });
     }
 
