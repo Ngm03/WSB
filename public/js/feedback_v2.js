@@ -260,6 +260,40 @@ async function loadReviews() {
 function renderReviews() {
     const list = document.getElementById('feedback-list');
     list.innerHTML = '';
+
+    // Check if current user has a review
+    const userReview = reviews.find(r => String(r.user_id) === String(currentUser.id));
+    const formWrapper = document.querySelector('.feedback-form-wrapper');
+
+    // Remove existing "already reviewed" message if any
+    const existingMsg = document.getElementById('already-reviewed-msg');
+    if (existingMsg) existingMsg.remove();
+
+    if (userReview) {
+        if (formWrapper) formWrapper.style.display = 'none';
+
+        const msg = document.createElement('div');
+        msg.id = 'already-reviewed-msg';
+        msg.style.textAlign = 'center';
+        msg.style.padding = '20px';
+        msg.style.color = 'var(--text-secondary)';
+        msg.style.background = 'var(--surface)';
+        msg.style.borderRadius = '16px';
+        msg.style.marginBottom = '24px';
+        msg.innerHTML = `
+            <div style="font-size: 40px; margin-bottom: 10px;">✅</div>
+            <div style="font-weight: 600; margin-bottom: 4px;">Вы уже оставили отзыв</div>
+            <div style="font-size: 13px;">Спасибо за ваше мнение! Вы можете отредактировать свой отзыв ниже.</div>
+        `;
+
+        // Insert message before the list section
+        const listSection = document.querySelector('.feedback-list-section');
+        if (listSection) listSection.parentNode.insertBefore(msg, listSection);
+
+    } else {
+        if (formWrapper) formWrapper.style.display = 'block';
+    }
+
     if (reviews.length === 0) {
         list.innerHTML = `<p style="text-align:center;color:#9ca3af;padding:40px;">${t.noReviews}</p>`;
         return;
