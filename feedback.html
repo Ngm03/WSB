@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Отзывы - Бот Общежития</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/feedback.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <header>
+        <svg class="icon" style="width:28px;height:28px;color:var(--primary);" viewBox="0 0 24 24" fill="currentColor">
+            <path
+                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+        </svg>
+        <h1 data-i18n="pageTitle">Отзывы</h1>
+    </header>
+
+    <div class="container">
+
+        <!-- Feedback Form -->
+        <div class="feedback-form-wrapper">
+            <h2 data-i18n="leaveFeedback">💡 Оставить отзыв</h2>
+            <form id="feedback-form">
+                <div class="form-group">
+                    <label data-i18n="category">Категория</label>
+                    <div class="custom-select-wrapper">
+                        <div class="custom-select" id="category-select">
+                            <div class="custom-select__trigger">
+                                <span data-i18n="selectCategory">Выберите категорию</span>
+                                <svg class="arrow" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </div>
+                            <div class="custom-options">
+                                <span class="custom-option" data-value="bug">🐛 Баг</span>
+                                <span class="custom-option" data-value="feature">✨ Новая функция</span>
+                                <span class="custom-option" data-value="improvement">🔧 Улучшение</span>
+                                <span class="custom-option" data-value="other">💬 Другое</span>
+                            </div>
+                        </div>
+                        <input type="hidden" id="f-category">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label data-i18n="yourFeedback">Ваш отзыв</label>
+                    <textarea id="f-message" rows="4" placeholder="Опишите вашу идею или проблему..."
+                        data-i18n-placeholder="feedbackPlaceholder" required></textarea>
+                </div>
+
+                <button type="submit" class="btn" data-i18n="send">Отправить</button>
+            </form>
+        </div>
+
+        <!-- Reviews List -->
+        <div class="feedback-list-section">
+            <h2 id="list-title" data-i18n="allReviews">Все отзывы</h2>
+            <div id="feedback-list">
+                <!-- Reviews will be generated here -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Edit Review Modal -->
+    <div id="edit-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-i18n="editReview">Редактировать отзыв</h3>
+                <span class="close-modal" onclick="closeEditModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label data-i18n="category">Категория</label>
+                    <select id="edit-category">
+                        <option value="bug">🐛 Баг</option>
+                        <option value="feature">✨ Новая функция</option>
+                        <option value="improvement">🔧 Улучшение</option>
+                        <option value="other">💬 Другое</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="yourFeedback">Ваш отзыв</label>
+                    <textarea id="edit-message" rows="4"></textarea>
+                </div>
+                <button class="btn" onclick="submitEditReview()" data-i18n="save">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Comment Modal -->
+    <div id="edit-comment-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-i18n="editComment">Редактировать комментарий</h3>
+                <span class="close-modal" onclick="closeEditCommentModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <textarea id="edit-comment-text" rows="4"></textarea>
+                </div>
+                <button class="btn" onclick="submitEditComment()" data-i18n="save">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nav will be injected by nav.js -->
+    <script src="js/nav.js"></script>
+    <script src="js/feedback.js?v=2"></script>
+</body>
+
+</html>
