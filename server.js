@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const { Pool } = require('pg');
 const path = require('path');
+const crypto = require('crypto');
 
 // --- НАСТРОЙКИ ---
 const token = '8005167313:AAFu5AxIB2Itfhdgr6peM7rip0HGUieJmkc';
@@ -239,6 +240,30 @@ function getWarsawDate() {
     const month = String(warsawNow.getMonth() + 1).padStart(2, '0');
     const day = String(warsawNow.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+function verifyTelegramWebAppData(telegramInitData) {
+    if (!telegramInitData) return null;
+
+    const urlParams = new URLSearchParams(telegramInitData);
+    const hash = urlParams.get('hash');
+    urlParams.delete('hash');
+    urlParams.sort();
+
+    let dataCheckString = '';
+    for (const [key, value] of urlParams.entries()) {
+        dataCheckString += `${key}=${value}\n`;
+    }
+    dataCheckString = dataCheckString.slice(0, -1);
+
+    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
+    const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+
+    if (calculatedHash === hash) {
+        return JSON.parse(urlParams.get('user'));
+    } else {
+        return null;
+    }
 }
 
 // --- API Endpoints ---
@@ -673,9 +698,17 @@ setInterval(async () => {
 
 app.post('/api/reviews', async (req, res) => {
     const { user_id, username, first_name, photo_url, category, message } = req.body;
+    const initData = req.headers['x-telegram-init-data'];
 
-    if (user_id === 'guest') {
-        return res.status(403).json({ "error": "Reviews not allowed for guests" });
+    // 1. Validate Telegram Data
+    const validatedUser = verifyTelegramWebAppData(initData);
+    if (!validatedUser) {
+        return res.status(403).json({ "error": "Unauthorized: Invalid Telegram Data" });
+    }
+
+    // 2. Ensure the user_id matches the validated data (prevent spoofing)
+    if (String(validatedUser.id) !== String(user_id)) {
+        return res.status(403).json({ "error": "Unauthorized: User ID mismatch" });
     }
 
     if (!message || !category) {
