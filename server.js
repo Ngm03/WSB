@@ -685,8 +685,8 @@ app.post('/api/reviews', async (req, res) => {
     try {
         const result = await pool.query('SELECT COUNT(*) as count FROM reviews WHERE user_id = $1', [user_id]);
 
-        if (parseInt(result.rows[0].count) >= 3) {
-            return res.status(400).json({ "error": "Вы уже оставили максимум отзывов (3)" });
+        if (parseInt(result.rows[0].count) >= 1) {
+            return res.status(400).json({ "error": "Вы можете оставить только 1 отзыв!" });
         }
 
         const sql = 'INSERT INTO reviews (user_id, username, first_name, photo_url, category, message) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id';
