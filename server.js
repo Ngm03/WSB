@@ -685,6 +685,49 @@ app.post('/api/reviews', async (req, res) => {
     }
 });
 
+app.patch('/api/reviews/:id', async (req, res) => {
+    const reviewId = req.params.id;
+    const userId = req.headers['x-user-id'];
+    const { category, message } = req.body;
+
+    if (!userId) return res.status(401).json({ "error": "Unauthorized" });
+
+    try {
+        const result = await pool.query('SELECT user_id FROM reviews WHERE id = $1', [reviewId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Review not found" });
+
+        if (String(result.rows[0].user_id) !== String(userId)) {
+            return res.status(403).json({ "error": "Forbidden" });
+        }
+
+        await pool.query('UPDATE reviews SET category = $1, message = $2 WHERE id = $3', [category, message, reviewId]);
+        res.json({ "message": "updated" });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
+});
+
+app.delete('/api/reviews/:id', async (req, res) => {
+    const reviewId = req.params.id;
+    const userId = req.headers['x-user-id'];
+
+    if (!userId) return res.status(401).json({ "error": "Unauthorized" });
+
+    try {
+        const result = await pool.query('SELECT user_id FROM reviews WHERE id = $1', [reviewId]);
+        if (result.rows.length === 0) return res.status(404).json({ "error": "Review not found" });
+
+        if (String(result.rows[0].user_id) !== String(userId)) {
+            return res.status(403).json({ "error": "Forbidden" });
+        }
+
+        await pool.query('DELETE FROM reviews WHERE id = $1', [reviewId]);
+        res.json({ "message": "deleted" });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
+});
+
 app.get('/api/reviews', async (req, res) => {
     const userId = req.headers['x-user-id'];
 

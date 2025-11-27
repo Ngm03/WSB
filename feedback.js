@@ -777,6 +777,61 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// --- Notification Helper ---
+function showNotification(message, isError = false) {
+    // Remove existing notification if any
+    const existing = document.getElementById('custom-notification');
+    if (existing) existing.remove();
+
+    const notification = document.createElement('div');
+    notification.id = 'custom-notification';
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: ${isError ? '#ef4444' : '#10b981'};
+        color: white;
+        padding: 12px 24px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 10000;
+        font-weight: 600;
+        font-size: 14px;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    `;
+
+    document.body.appendChild(notification);
+
+    // Fade in
+    requestAnimationFrame(() => {
+        notification.style.opacity = '1';
+    });
+
+    // Fade out and remove
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Replace tg.showAlert with showNotification
+const originalShowAlert = tg.showAlert;
+tg.showAlert = (message) => {
+    // Try original first (if supported), fallback to custom
+    try {
+        originalShowAlert(message);
+    } catch (e) {
+        showNotification(message, true); // Default to error style for alerts usually
+    }
+};
+
+// Also expose for direct usage
+window.showNotification = showNotification;
+
 window.toggleLike = toggleLike;
 window.toggleComments = toggleComments;
 window.submitComment = submitComment;
