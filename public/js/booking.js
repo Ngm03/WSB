@@ -568,6 +568,154 @@ form.onsubmit = async (e) => {
     }
 };
 
+// --- Details Modal ---
+
+const detailsOverlay = document.getElementById('details-overlay');
+
+function openDetailsModal(booking) {
+    const isOwner = String(booking.user_id) === String(currentUser.id);
+    const isAdmin = ['299696306', '1300836384'].includes(String(currentUser.id));
+
+    document.getElementById('d-time').textContent = `${booking.slot_time} - ${booking.end_time}`;
+
+    const dateObj = new Date(booking.date);
+    const locale = currentUser.language_code === 'ru' ? 'ru-RU' : currentUser.language_code === 'pl' ? 'pl-PL' : 'en-US';
+    const dateOptions = { day: 'numeric', month: 'long', weekday: 'long' };
+    document.getElementById('d-date').textContent = dateObj.toLocaleDateString(locale, dateOptions);
+    document.getElementById('d-duration').textContent = calculateDuration(booking.slot_time, booking.end_time);
+
+    const avatarEl = document.getElementById('d-avatar');
+    if (booking.photo_url) {
+        avatarEl.src = booking.photo_url;
+        avatarEl.style.display = 'block';
+    } else {
+        avatarEl.style.display = 'none';
+    }
+
+    document.getElementById('d-name').textContent = booking.first_name || booking.username || 'Guest';
+
+    const commentEl = document.getElementById('d-comment');
+    commentEl.textContent = booking.comment || 'Нет комментария';
+    commentEl.removeAttribute('data-original');
+    commentEl.classList.remove('translated');
+    commentEl.style.fontStyle = 'normal';
+    commentEl.style.color = '';
+
+    const translateBtn = document.getElementById('btn-translate-comment');
+    if (booking.comment) {
+        translateBtn.style.display = 'block';
+        translateBtn.onclick = () => translateBookingComment(booking.comment, 'd-comment');
+    } else {
+        translateBtn.style.display = 'none';
+    }
+
+    const deleteBtn = document.getElementById('btn-delete-booking');
+    const editBtn = document.getElementById('btn-edit-booking');
+
+    if (isOwner || isAdmin) {
+        deleteBtn.style.display = 'block';
+        deleteBtn.onclick = () => deleteBooking(booking.id);
+        editBtn.style.display = 'block';
+        editBtn.onclick = () => editBooking(booking);
+    } else {
+        deleteBtn.style.display = 'none';
+        editBtn.style.display = 'none';
+    }
+
+    detailsOverlay.classList.add('active');
+}
+
+async function translateBookingComment(originalText, elementId) {
+    const commentEl = document.getElementById(elementId);
+
+    if (commentEl.classList.contains('translated')) {
+        const original = commentEl.getAttribute('data-original');
+        if (original) {
+            commentEl.textContent = original;
+            commentEl.classList.remove('translated');
+            commentEl.style.fontStyle = 'normal';
+            commentEl.style.color = '';
+        }
+        return;
+    }
+
+    if (!commentEl.getAttribute('data-original')) {
+        commentEl.setAttribute('data-original', originalText);
+    }
+
+    const targetLang = currentUser.language_code || 'en';
+
+    try {
+        const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(originalText)}`);
+        const data = await response.json();
+
+        if (data && data[0] && data[0][0]) {
+            const translatedText = data[0].map(item => item[0]).join('');
+            commentEl.textContent = translatedText;
+            commentEl.classList.add('translated');
+            commentEl.style.fontStyle = 'italic';
+            commentEl.style.color = '#7c3aed';
+        }
+    } catch (error) {
+        console.error('Translation error:', error);
+        showTelegramAlert('Translation failed');
+    }
+}
+
+function editBooking(booking) {
+    currentEditingBooking = booking;
+    detailsOverlay.classList.remove('active');
+
+    selectedDate = new Date(booking.date);
+    const locale = currentUser.language_code === 'ru' ? 'ru-RU' : currentUser.language_code === 'pl' ? 'pl-PL' : 'en-US';
+    const dateStr = selectedDate.toLocaleDateString(locale, { day: 'numeric', month: 'long' });
+    document.getElementById('sheet-date').textContent = dateStr;
+
+    document.getElementById('trigger-start').textContent = booking.slot_time;
+    document.getElementById('trigger-end').textContent = booking.end_time;
+    document.getElementById('b-start').value = booking.slot_time;
+    document.getElementById('b-end').value = booking.end_time;
+    document.getElementById('b-comment').value = booking.comment || '';
+
+    document.querySelector('#booking-modal-overlay .modal-title').textContent = 'Редактирование';
+    document.querySelector('#booking-form .btn').textContent = 'Сохранить изменения';
+    modalOverlay.classList.add('active');
+}
+
+modalOverlay.onclick = (e) => {
+    if (e.target === modalOverlay) {
+        modalOverlay.classList.remove('active');
+        currentEditingBooking = null;
+        document.querySelector('#booking-modal-overlay .modal-title').textContent = 'Новая бронь';
+        document.querySelector('#booking-form .btn').textContent = 'Забронировать';
+    }
+};
+
+detailsOverlay.onclick = (e) => {
+    if (e.target === detailsOverlay) detailsOverlay.classList.remove('active');
+};
+
+async function deleteBooking(id) {
+    if (!confirm('Удалить бронь?')) return;
+    try {
+        const response = await fetch(`${API_URL}/bookings/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'x-user-id': currentUser.id,
+                'x-telegram-init-data': window.Telegram.WebApp.initData
+            }
+        });
+        if (response.ok) {
+            detailsOverlay.classList.remove('active');
+            loadBookings();
+        } else {
+            showTelegramAlert('Ошибка удаления');
+        }
+    } catch (error) {
+        console.error(error);
+    }
+}
+
 // --- FAB ---
 
 fab.onclick = () => {
