@@ -12,34 +12,22 @@ const ADMIN_IDS = ['299696306', '1300836384'];
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Render Public URL (автоматически определяется или задается вручную)
+// Render Public URL
 const RENDER_PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || 'https://wsb-fx6d.onrender.com';
 const WEBHOOK_PATH = '/bot' + token;
 const fullWebhookUrl = RENDER_PUBLIC_URL + WEBHOOK_PATH;
 
-// Инициализация бота: webhook для production, polling для development
+// Инициализация бота
 const useWebhook = process.env.NODE_ENV === 'production' || process.env.USE_WEBHOOK === 'true';
 
-let botOptions = {};
-
+let bot;
 if (useWebhook) {
-    // Production mode: используем webhook
-    botOptions = {
-        webHook: {
-            port: PORT
-        }
-    };
+    // Production: webhook mode (без своего сервера)
+    bot = new TelegramBot(token, { webHook: true });
     console.log('🌐 Bot will use WEBHOOK mode (production)');
 } else {
-    // Development mode: используем polling
-    botOptions = { polling: true };
-    console.log('🔄 Bot running in POLLING mode (development)');
-}
-
-const bot = new TelegramBot(token, botOptions);
-
-// Handle polling errors (только для development)
-if (!useWebhook) {
+    // Development: polling mode
+    bot = new TelegramBot(token, { polling: true });
     bot.on('polling_error', (error) => {
         if (error.code === 'EFATAL') {
             console.error('[Telegram Bot] Connection error - retrying...', error.message);
@@ -47,9 +35,10 @@ if (!useWebhook) {
             console.error('[Telegram Bot] Polling error:', error.code || error.message);
         }
     });
+    console.log('🔄 Bot running in POLLING mode (development)');
 }
 
-// Setup PostgreSQL Connection Pool
+// PostgreSQL Connection Pool
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgresql://postgres:@localhost:5432/dorm_app',
     ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
@@ -58,7 +47,6 @@ const pool = new Pool({
     connectionTimeoutMillis: 2000,
 });
 
-// Test connection
 pool.connect((err, client, release) => {
     if (err) {
         console.error('Error connecting to PostgreSQL:', err.message);
@@ -69,7 +57,6 @@ pool.connect((err, client, release) => {
     }
 });
 
-// Handle pool errors
 pool.on('error', (err) => {
     console.error('Unexpected error on idle PostgreSQL client', err);
 });
@@ -252,17 +239,15 @@ function getWarsawDate() {
 
 // --- API Endpoints ---
 
-// Health check
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Root endpoint
 app.get('/', (req, res) => {
     res.send('Dorm App API is running! 🎮');
 });
 
-// Telegram Webhook endpoint (для production)
+// Telegram Webhook endpoint
 if (useWebhook) {
     app.post(WEBHOOK_PATH, (req, res) => {
         bot.processUpdate(req.body);
@@ -271,7 +256,6 @@ if (useWebhook) {
     console.log(`📨 Webhook endpoint: ${WEBHOOK_PATH}`);
 }
 
-// Sync user data
 app.post('/api/user/sync', async (req, res) => {
     const { user_id, username, first_name, photo_url, language_code } = req.body;
 
@@ -295,7 +279,6 @@ app.post('/api/user/sync', async (req, res) => {
     }
 });
 
-// Get user profile photo
 app.get('/api/user/photo/:userId', async (req, res) => {
     const userId = req.params.userId;
 
@@ -320,7 +303,6 @@ app.get('/api/user/photo/:userId', async (req, res) => {
     }
 });
 
-// Get bookings
 app.get('/api/bookings', async (req, res) => {
     const floor = req.query.floor || '3';
     const sql = `SELECT b.* FROM bookings b WHERE b.floor = $1 ORDER BY b.date, b.slot_time`;
@@ -332,7 +314,6 @@ app.get('/api/bookings', async (req, res) => {
     }
 });
 
-// Create booking
 app.post('/api/bookings', async (req, res) => {
     const { user_id, username, first_name, photo_url, language_code, date, slot_time, end_time, comment, floor = '3' } = req.body;
 
@@ -406,7 +387,6 @@ app.post('/api/bookings', async (req, res) => {
     }
 });
 
-// Update booking
 app.put('/api/bookings/:id', async (req, res) => {
     const bookingId = req.params.id;
     const userId = req.headers['x-user-id'];
@@ -467,7 +447,6 @@ app.put('/api/bookings/:id', async (req, res) => {
     }
 });
 
-// Delete booking
 app.delete('/api/bookings/:id', async (req, res) => {
     const bookingId = req.params.id;
     const userId = req.headers['x-user-id'];
@@ -495,7 +474,6 @@ app.delete('/api/bookings/:id', async (req, res) => {
     }
 });
 
-// Gatherings endpoints
 app.get('/api/gatherings', async (req, res) => {
     const userId = req.headers['x-user-id'];
     const sql = `
@@ -654,7 +632,6 @@ app.delete('/api/gathering-comments/:id', async (req, res) => {
     }
 });
 
-// Notification system
 setInterval(async () => {
     const warsawNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
     const currentDate = getWarsawDate();
@@ -686,7 +663,6 @@ setInterval(async () => {
     }
 }, 60000);
 
-// Reviews endpoints
 app.post('/api/reviews', async (req, res) => {
     const { user_id, username, first_name, photo_url, category, message } = req.body;
 
@@ -871,7 +847,6 @@ app.delete('/api/reviews/:id', async (req, res) => {
     }
 });
 
-// Telegram Bot Commands
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, '👋 Привет! Это бот общежития.\n\nЗдесь можно:\n🎮 Забронировать PS зону\n📢 Создать сбор (например, поиграть в снежки)', {
@@ -890,11 +865,41 @@ bot.onText(/\/start/, (msg) => {
 app.listen(PORT, async () => {
     console.log(`Server running on http://localhost:${PORT}`);
 
-    // Setup webhook for production
+    // Setup webhook for production using direct API call
     if (useWebhook) {
         try {
-            await bot.setWebhook(fullWebhookUrl);
-            console.log(`✅ Webhook установлен: ${fullWebhookUrl}`);
+            const https = require('https');
+            const webhookUrl = `https://api.telegram.org/bot${token}/setWebhook`;
+
+            const postData = JSON.stringify({ url: fullWebhookUrl });
+
+            const options = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(postData)
+                }
+            };
+
+            const req = https.request(webhookUrl, options, (res) => {
+                let data = '';
+                res.on('data', (chunk) => { data += chunk; });
+                res.on('end', () => {
+                    const result = JSON.parse(data);
+                    if (result.ok) {
+                        console.log(`✅ Webhook установлен: ${fullWebhookUrl}`);
+                    } else {
+                        console.error('❌ Ошибка установки webhook:', result.description);
+                    }
+                });
+            });
+
+            req.on('error', (error) => {
+                console.error('❌ Ошибка установки webhook:', error.message);
+            });
+
+            req.write(postData);
+            req.end();
         } catch (error) {
             console.error('❌ Ошибка установки webhook:', error.message);
         }
