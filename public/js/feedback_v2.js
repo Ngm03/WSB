@@ -494,7 +494,7 @@ async function translateMessage(reviewId) {
         }
     } catch (error) {
         console.error('Error:', error);
-        tg.showAlert(t.error);
+        showTelegramAlert(t.error);
     }
 }
 
@@ -524,7 +524,7 @@ async function translateComment(commentId) {
         }
     } catch (error) {
         console.error('Error:', error);
-        tg.showAlert(t.error);
+        showTelegramAlert(t.error);
     }
 }
 
@@ -538,15 +538,15 @@ async function deleteReview(reviewId) {
         });
 
         if (response.ok) {
-            tg.showAlert(t.reviewDeleted);
+            showTelegramAlert(t.reviewDeleted);
             loadReviews();
         } else {
             const data = await response.json();
-            tg.showAlert(data.error || t.error);
+            showTelegramAlert(data.error || t.error);
         }
     } catch (error) {
         console.error('Error:', error);
-        tg.showAlert(t.networkError);
+        showTelegramAlert(t.networkError);
     }
 }
 
@@ -567,7 +567,7 @@ async function deleteComment(commentId) {
                 await loadReviews();
             }
         } else {
-            tg.showAlert(t.error);
+            showTelegramAlert(t.error);
         }
     } catch (error) {
         console.error('Error:', error);
@@ -599,7 +599,7 @@ async function submitEditReview() {
     const message = document.getElementById('edit-message').value;
 
     if (!category || !message) {
-        tg.showAlert('Заполните все поля!');
+        showTelegramAlert('Заполните все поля!');
         return;
     }
 
@@ -618,15 +618,15 @@ async function submitEditReview() {
 
         const result = await response.json();
         if (response.ok) {
-            tg.showAlert(t.reviewUpdated);
+            showTelegramAlert(t.reviewUpdated);
             closeEditModal();
             loadReviews();
         } else {
-            tg.showAlert(result.error || t.error);
+            showTelegramAlert(result.error || t.error);
         }
     } catch (error) {
         console.error('Error:', error);
-        tg.showAlert(t.networkError);
+        showTelegramAlert(t.networkError);
     }
 }
 
@@ -652,7 +652,7 @@ async function submitEditComment() {
     const comment = document.getElementById('edit-comment-text').value;
 
     if (!comment) {
-        tg.showAlert(t.commentEmpty);
+        showTelegramAlert(t.commentEmpty);
         return;
     }
 
@@ -672,21 +672,26 @@ async function submitEditComment() {
                 await loadComments(expandedReviewId);
             }
         } else {
-            tg.showAlert(t.error);
+            showTelegramAlert(t.error);
         }
     } catch (error) {
         console.error('Error:', error);
-        tg.showAlert('Ошибка сети');
+        showTelegramAlert('Ошибка сети');
     }
 }
 
 // --- Submit New Review ---
 async function submitReview(e) {
     e.preventDefault();
+
+    if (currentUser.id === 'guest') {
+        showTelegramAlert('Отзывы могут оставлять только пользователи Telegram Mini App!');
+        return;
+    }
     const category = document.getElementById('f-category').value;
     const message = document.getElementById('f-message').value;
     if (!category || !message) {
-        tg.showAlert('Заполните все поля!');
+        showTelegramAlert('Заполните все поля!');
         return;
     }
 
@@ -709,15 +714,15 @@ async function submitReview(e) {
 
         const result = await response.json();
         if (response.ok) {
-            tg.showAlert(t.thankYou);
+            showTelegramAlert(t.thankYou);
             document.getElementById('feedback-form').reset();
             loadReviews();
         } else {
-            tg.showAlert(result.error || t.error);
+            showTelegramAlert(result.error || t.error);
         }
     } catch (error) {
         console.error('Error:', error);
-        tg.showAlert(t.networkError);
+        showTelegramAlert(t.networkError);
     }
 }
 
@@ -779,6 +784,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+
+// --- Helper Functions ---
+
+function showTelegramAlert(message) {
+    if (window.Telegram?.WebApp?.showPopup) {
+        try {
+            window.Telegram.WebApp.showPopup({
+                title: 'Внимание',
+                message: message,
+                buttons: [{ type: 'ok' }]
+            });
+        } catch (e) {
+            console.warn('showPopup failed, falling back to alert', e);
+            alert(message);
+        }
+    } else {
+        alert(message);
+    }
+}
 
 // --- Notification Helper ---
 function showNotification(message, isError = false) {

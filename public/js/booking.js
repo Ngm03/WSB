@@ -173,8 +173,17 @@ window.addEventListener('languagechange', () => {
 // --- Helper Functions ---
 
 function showTelegramAlert(message) {
-    if (window.Telegram?.WebApp?.showAlert) {
-        window.Telegram.WebApp.showAlert(message);
+    if (window.Telegram?.WebApp?.showPopup) {
+        try {
+            window.Telegram.WebApp.showPopup({
+                title: 'Внимание',
+                message: message,
+                buttons: [{ type: 'ok' }]
+            });
+        } catch (e) {
+            console.warn('showPopup failed, falling back to alert', e);
+            alert(message);
+        }
     } else {
         alert(message);
     }
