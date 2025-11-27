@@ -12,6 +12,10 @@ const ADMIN_IDS = ['299696306', '1300836384'];
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(cors());
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Render Public URL
 const RENDER_PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || 'https://wsb-fx6d.onrender.com';
 const WEBHOOK_PATH = '/bot' + token;
