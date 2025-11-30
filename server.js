@@ -275,6 +275,17 @@ const BLOCKED_IPS = new Set();
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
 const MAX_REQUESTS = 20; // Max requests per window
 
+// User-specific rate limiting
+const userRequestCounts = new Map();
+const BLOCKED_USERS = new Set();
+const USER_RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+const USER_MAX_REQUESTS = 30; // Max requests per user per window
+
+// Booking limitations
+const MAX_ACTIVE_BOOKINGS = 3; // Максимум активных броней на пользователя
+const MAX_DAILY_HOURS = 6; // Максимум часов в день
+const MAX_WEEKLY_HOURS = 20; // Максимум часов в неделю
+
 function getClientIp(req) {
     return req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
 }
@@ -305,6 +316,67 @@ function rateLimiter(req, res, next) {
     }
 
     next();
+}
+
+// --- Booking Limitation Helpers ---
+
+function calculateBookingDuration(startTime, endTime) {
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+
+    let duration = 0;
+    if (endTime < startTime) {
+        // Бронь через полночь
+        duration = (24 - startHour) + endHour + (endMin - startMin) / 60;
+    } else {
+        duration = (endHour - startHour) + (endMin - startMin) / 60;
+    }
+    return duration;
+}
+
+async function getUserActiveBookingsCount(client, userId) {
+    const today = getWarsawDate();
+    const result = await client.query(
+        'SELECT COUNT(*) as count FROM bookings WHERE user_id = $1 AND date >= $2',
+        [userId, today]
+    );
+    return parseInt(result.rows[0].count);
+}
+
+async function getUserDailyHours(client, userId, date) {
+    const result = await client.query(
+        'SELECT slot_time, end_time FROM bookings WHERE user_id = $1 AND date = $2',
+        [userId, date]
+    );
+
+    let totalHours = 0;
+    for (const booking of result.rows) {
+        totalHours += calculateBookingDuration(booking.slot_time, booking.end_time);
+    }
+    return totalHours;
+}
+
+async function getUserWeeklyHours(client, userId, date) {
+    const dateObj = new Date(date);
+    const dayOfWeek = dateObj.getDay();
+    const monday = new Date(dateObj);
+    monday.setDate(dateObj.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    const mondayStr = monday.toISOString().split('T')[0];
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const sundayStr = sunday.toISOString().split('T')[0];
+
+    const result = await client.query(
+        'SELECT slot_time, end_time FROM bookings WHERE user_id = $1 AND date >= $2 AND date <= $3',
+        [userId, mondayStr, sundayStr]
+    );
+
+    let totalHours = 0;
+    for (const booking of result.rows) {
+        totalHours += calculateBookingDuration(booking.slot_time, booking.end_time);
+    }
+    return totalHours;
 }
 
 // --- API Endpoints ---
@@ -443,6 +515,39 @@ app.post('/api/bookings', rateLimiter, async (req, res) => {
 
         try {
             await upsertUser(client, { user_id, username, first_name, photo_url, language_code });
+
+            // 4. Проверка ограничений бронирования
+            const newBookingDuration = calculateBookingDuration(slot_time, end_time);
+
+            // 4.1 Проверка максимального количества активных броней
+            const activeBookingsCount = await getUserActiveBookingsCount(client, user_id);
+            if (activeBookingsCount >= MAX_ACTIVE_BOOKINGS) {
+                await client.query('ROLLBACK');
+                await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
+                return res.status(400).json({
+                    "error": `У вас уже есть ${activeBookingsCount} активных броней. Максимум разрешено ${MAX_ACTIVE_BOOKINGS} броней одновременно.`
+                });
+            }
+
+            // 4.2 Проверка дневного лимита часов
+            const dailyHours = await getUserDailyHours(client, user_id, date);
+            if (dailyHours + newBookingDuration > MAX_DAILY_HOURS) {
+                await client.query('ROLLBACK');
+                await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
+                return res.status(400).json({
+                    "error": `Превышен дневной лимит! У вас уже ${dailyHours.toFixed(1)} часов на ${date}. Максимум ${MAX_DAILY_HOURS} часов в день.`
+                });
+            }
+
+            // 4.3 Проверка недельного лимита часов
+            const weeklyHours = await getUserWeeklyHours(client, user_id, date);
+            if (weeklyHours + newBookingDuration > MAX_WEEKLY_HOURS) {
+                await client.query('ROLLBACK');
+                await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
+                return res.status(400).json({
+                    "error": `Превышен недельный лимит! У вас уже ${weeklyHours.toFixed(1)} часов на этой неделе. Максимум ${MAX_WEEKLY_HOURS} часов в неделю.`
+                });
+            }
 
             if (end_time < slot_time) {
                 const nextDateObj = new Date(date);
@@ -605,15 +710,19 @@ app.post('/api/gatherings', rateLimiter, async (req, res) => {
     }
 
     // 1. Validate Telegram Data
+    console.log('🔍 Validating Telegram Data for Gathering...');
     const validatedUser = verifyTelegramWebAppData(initData);
     if (!validatedUser) {
+        console.error('❌ Validation Failed: Invalid Telegram Data');
         return res.status(403).json({ "error": "Unauthorized: Invalid Telegram Data" });
     }
 
     // 2. Ensure the user_id matches the validated data
     if (String(validatedUser.id) !== String(user_id)) {
+        console.error(`❌ Validation Failed: User ID mismatch. Body: ${user_id}, Validated: ${validatedUser.id}`);
         return res.status(403).json({ "error": "Unauthorized: User ID mismatch" });
     }
+    console.log('✅ Validation Success');
 
     // 3. User Rate Limiting
     const now = Date.now();
@@ -804,11 +913,7 @@ setInterval(async () => {
     }
 }, 60000);
 
-// --- User Rate Limiter ---
-const userRequestCounts = new Map();
-const BLOCKED_USERS = new Set();
-const USER_RATE_LIMIT_WINDOW = 5 * 60 * 1000; // 5 minutes
-const USER_MAX_REQUESTS = 10; // Max requests per window
+
 
 app.post('/api/reviews', rateLimiter, async (req, res) => {
     const { user_id, username, first_name, photo_url, category, message } = req.body;
